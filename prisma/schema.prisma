@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// ==========================================
+// Enums
+// ==========================================
+
+enum UserRole {
+  ADMIN
+  EMPRESARIA
+  LIDER
+  CONSULTOR
+}
+
+enum DebtStatus {
+  PENDENTE
+  ATRASADO
+  PAGO
+}
+
+enum PaymentMethod {
+  PIX
+  CARTAO_CREDITO
+}
+
+enum PaymentStatus {
+  PENDENTE
+  PAGO
+  CANCELADO
+}
+
+// ==========================================
+// Models
+// ==========================================
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  cpf       String   @unique
+  email     String   @unique
+  password  String
+  role      UserRole @default(CONSULTOR)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  consultant     Consultant?
+  payments       Payment[]
+  passwordResets PasswordReset[]
+
+  @@map("users")
+}
+
+model Consultant {
+  id        String   @id @default(uuid())
+  codigo    String   @unique
+  tipo      Int // 1 = Empresária, 2 = Líder, 3 = Consultor
+  grupo     String
+  distrito  String
+  cpf       String   @unique
+  userId    String?  @unique @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("consultants")
+}
+
+model Debt {
+  id             String     @id @default(uuid())
+  codigo         String
+  nome           String
+  grupo          String
+  distrito       String
+  semana         String
+  valor          Decimal    @db.Decimal(10, 2)
+  diasAtraso     Int        @map("dias_atraso")
+  dataVencimento DateTime   @map("data_vencimento")
+  numeroNf       String     @map("numero_nf")
+  status         DebtStatus @default(PENDENTE)
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  paymentDebts PaymentDebt[]
+
+  @@map("debts")
+}
+
+model Payment {
+  id           String        @id @default(uuid())
+  userId       String        @map("user_id")
+  method       PaymentMethod
+  installments Int           @default(1)
+  subtotal     Decimal       @db.Decimal(10, 2)
+  fee          Decimal       @db.Decimal(10, 2) @default(0)
+  totalValue   Decimal       @db.Decimal(10, 2) @map("total_value")
+  status       PaymentStatus @default(PENDENTE)
+  paymentLink  String?       @map("payment_link")
+  asaasId      String?       @map("asaas_id")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  user         User          @relation(fields: [userId], references: [id])
+  paymentDebts PaymentDebt[]
+
+  @@map("payments")
+}
+
+model PaymentDebt {
+  id        String @id @default(uuid())
+  paymentId String @map("payment_id")
+  debtId    String @map("debt_id")
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+  debt    Debt    @relation(fields: [debtId], references: [id])
+
+  @@unique([paymentId, debtId])
+  @@map("payment_debts")
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("password_resets")
+}
