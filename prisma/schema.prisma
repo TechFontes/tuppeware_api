@@ -13,6 +13,7 @@ datasource db {
 
 enum UserRole {
   ADMIN
+  GERENTE
   EMPRESARIA
   LIDER
   CONSULTOR
@@ -35,23 +36,38 @@ enum PaymentStatus {
   CANCELADO
 }
 
+enum GatewayProvider {
+  EREDE
+}
+
 // ==========================================
 // Models
 // ==========================================
 
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  cpf       String   @unique
-  email     String   @unique
-  password  String
-  role      UserRole @default(CONSULTOR)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id               String    @id @default(uuid())
+  name             String
+  cpf              String    @unique
+  email            String    @unique
+  password         String
+  role             UserRole  @default(CONSULTOR)
+  isActive         Boolean   @default(true) @map("is_active")
+  phone            String?
+  birthDate        DateTime? @map("birth_date")
+  address          String?
+  addressNumber    String?   @map("address_number")
+  addressComplement String?  @map("address_complement")
+  neighbourhood    String?
+  city             String?
+  state            String?
+  postalCode       String?   @map("postal_code")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   consultant     Consultant?
   payments       Payment[]
   passwordResets PasswordReset[]
+  savedCards     SavedCard[]
 
   @@map("users")
 }
@@ -82,7 +98,7 @@ model Debt {
   valor          Decimal    @db.Decimal(10, 2)
   diasAtraso     Int        @map("dias_atraso")
   dataVencimento DateTime   @map("data_vencimento")
-  numeroNf       String     @map("numero_nf")
+  numeroNf       String     @unique @map("numero_nf")
   status         DebtStatus @default(PENDENTE)
   createdAt      DateTime   @default(now()) @map("created_at")
   updatedAt      DateTime   @updatedAt @map("updated_at")
@@ -93,22 +109,32 @@ model Debt {
 }
 
 model Payment {
-  id           String        @id @default(uuid())
-  userId       String        @map("user_id")
-  method       PaymentMethod
-  installments Int           @default(1)
-  subtotal     Decimal       @db.Decimal(10, 2)
-  fee          Decimal       @db.Decimal(10, 2) @default(0)
-  totalValue   Decimal       @db.Decimal(10, 2) @map("total_value")
-  status       PaymentStatus @default(PENDENTE)
-  paymentLink  String?       @map("payment_link")
-  asaasId      String?       @map("asaas_id")
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
+  id                   String          @id @default(uuid())
+  userId               String          @map("user_id")
+  method               PaymentMethod
+  installments         Int             @default(1)
+  subtotal             Decimal         @db.Decimal(10, 2)
+  fee                  Decimal         @db.Decimal(10, 2) @default(0)
+  totalValue           Decimal         @db.Decimal(10, 2) @map("total_value")
+  status               PaymentStatus   @default(PENDENTE)
+  gatewayProvider      GatewayProvider @default(EREDE) @map("gateway_provider")
+  referenceNum         String?         @unique @map("reference_num")
+  gatewayTransactionId String?         @unique @map("gateway_transaction_id")
+  gatewayOrderId       String?         @map("gateway_order_id")
+  gatewayStatusCode    String?         @map("gateway_status_code")
+  gatewayStatusMessage String?         @map("gateway_status_message")
+  processorReference   String?         @map("processor_reference")
+  paymentLink          String?         @map("payment_link") @db.Text
+  qrCode               String?         @map("qr_code") @db.Text
+  callbackPayload      Json?           @map("callback_payload")
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
 
   user         User          @relation(fields: [userId], references: [id])
   paymentDebts PaymentDebt[]
 
+  @@index([referenceNum])
+  @@index([gatewayTransactionId])
   @@map("payments")
 }
 
@@ -135,4 +161,26 @@ model PasswordReset {
   user User @relation(fields: [userId], references: [id])
 
   @@map("password_resets")
+}
+
+model SavedCard {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  token         String   @unique
+  cardBrand     String?  @map("card_brand")
+  lastFour      String   @map("last_four")
+  holderName    String   @map("holder_name")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("saved_cards")
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
 }

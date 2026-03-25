@@ -1,4 +1,4 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { Request } from 'express';
 
 /**
@@ -9,7 +9,7 @@ const paymentLinkRateLimiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '') || 5 * 60 * 1000, // 5 minutos
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '') || 5,
   keyGenerator: (req: Request) => {
-    return req.user ? req.user.id : req.ip || 'unknown';
+    return req.user ? req.user.id : ipKeyGenerator(req.ip || '');
   },
   message: {
     status: 'fail',

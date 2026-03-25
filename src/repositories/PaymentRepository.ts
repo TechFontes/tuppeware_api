@@ -56,9 +56,18 @@ class PaymentRepository {
     });
   }
 
-  async findByAsaasId(asaasId: string) {
+  async findByGatewayTransactionId(gatewayTransactionId: string) {
     return await prisma.payment.findFirst({
-      where: { asaasId },
+      where: { gatewayTransactionId } as Prisma.PaymentWhereInput,
+      include: {
+        paymentDebts: { include: { debt: true } },
+      },
+    });
+  }
+
+  async findByReferenceNum(referenceNum: string) {
+    return await prisma.payment.findFirst({
+      where: { referenceNum } as Prisma.PaymentWhereInput,
       include: {
         paymentDebts: { include: { debt: true } },
       },
@@ -74,6 +83,37 @@ class PaymentRepository {
         createdAt: { gte: since },
       },
     });
+  }
+
+  async countPendingByUser(userId: string) {
+    return await prisma.payment.count({
+      where: {
+        userId,
+        status: 'PENDENTE',
+      },
+    });
+  }
+
+  async findMany({ where, skip, take }: {
+    where?: Prisma.PaymentWhereInput;
+    skip?: number;
+    take?: number;
+  }) {
+    const [data, total] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        include: {
+          paymentDebts: { include: { debt: true } },
+          user: { select: { id: true, name: true, email: true, cpf: true } },
+        },
+      }),
+      prisma.payment.count({ where }),
+    ]);
+
+    return { data, total };
   }
 }
 

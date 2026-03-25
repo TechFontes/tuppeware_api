@@ -1,12 +1,26 @@
 import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import csvImportService from '../services/CsvImportService';
+import userService from '../services/UserService';
+import debtRepository from '../repositories/DebtRepository';
+import paymentRepository from '../repositories/PaymentRepository';
+import consultantRepository from '../repositories/ConsultantRepository';
+import settingsRepository from '../repositories/SettingsRepository';
+import type { UserRole, Prisma } from '../../generated/prisma/client';
+
+function getPagination(query: Record<string, unknown>) {
+  const page = Math.max(1, parseInt(String(query.page || '1')));
+  const limit = Math.min(100, Math.max(1, parseInt(String(query.limit || '20'))));
+  const skip = (page - 1) * limit;
+
+  return { page, limit, skip };
+}
 
 class AdminController {
-  /**
-   * POST /api/admin/import/consultants
-   * Importa consultores via arquivo CSV.
-   */
+  // -----------------------------------------------------------------------
+  // CSV Imports
+  // -----------------------------------------------------------------------
+
   async importConsultants(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await csvImportService.importConsultants(req.file!.buffer);
@@ -21,10 +35,6 @@ class AdminController {
     }
   }
 
-  /**
-   * POST /api/admin/import/debts
-   * Importa débitos via arquivo CSV.
-   */
   async importDebts(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await csvImportService.importDebts(req.file!.buffer);
@@ -33,6 +43,402 @@ class AdminController {
         status: 'success',
         message: `Importação concluída: ${result.success} de ${result.total} registros importados.`,
         data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/admin/import/clients
+   */
+  async importClients(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await csvImportService.importClients(req.file!.buffer);
+
+      res.status(StatusCodes.OK).json({
+        status: 'success',
+        message: `Importação concluída: ${result.success} de ${result.total} registros importados.`,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // User Management
+  // -----------------------------------------------------------------------
+
+  /**
+   * GET /api/admin/users
+   */
+  async listUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const pagination = getPagination(req.query as Record<string, unknown>);
+      const { role, grupo, distrito, isActive } = req.query as Record<string, string>;
+
+      const result = await userService.listUsers({
+        role: role as UserRole | undefined,
+        grupo,
+        distrito,
+        isActive: isActive !== undefined ? isActive === 'true' : undefined,
+        pagination,
+      });
+
+      res.status(StatusCodes.OK).json({ status: 'success', ...result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/admin/users/:id
+   */
+  async getUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const user = await userService.findById(String(req.params.id));
+
+      res.status(StatusCodes.OK).json({ status: 'success', data: user });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PUT /api/admin/users/:id
+   */
+  async updateUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const user = await userService.update(String(req.params.id), req.body as Prisma.UserUpdateInput);
+
+      res.status(StatusCodes.OK).json({ status: 'success', data: user });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/admin/users/:id/deactivate
+   */
+  async deactivateUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const user = await userService.deactivateUser(String(req.params.id));
+
+      res.status(StatusCodes.OK).json({ status: 'success', data: user });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/admin/users/:id/payments
+   */
+  async getUserPayments(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const pagination = getPagination(req.query as Record<string, unknown>);
+      const result = await userService.getUserPayments(String(req.params.id), pagination);
+
+      res.status(StatusCodes.OK).json({ status: 'success', data: result.data, pagination: {
+        total: result.total,
+        page: pagination.page,
+        limit: pagination.limit,
+        totalPages: Math.ceil(result.total / pagination.limit),
+        hasNextPage: pagination.skip + pagination.limit < result.total,
+        hasPreviousPage: pagination.page > 1,
+      } });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // GERENTE: Manager Management
+  // -----------------------------------------------------------------------
+
+  /**
+   * POST /api/admin/managers
+   */
+  async createManager(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { name, cpf, email, password } = req.body as Record<string, string>;
+      const manager = await userService.createAdmin({ name, cpf, email, password });
+
+      res.status(StatusCodes.CREATED).json({ status: 'success', data: manager });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/admin/managers
+   */
+  async listManagers(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const pagination = getPagination(req.query as Record<string, unknown>);
+      const result = await userService.listAdmins(pagination);
+
+      res.status(StatusCodes.OK).json({ status: 'success', ...result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PUT /api/admin/managers/:id
+   */
+  async updateManager(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { name, email } = req.body as { name?: string; email?: string };
+      const manager = await userService.updateAdmin(String(req.params.id), { name, email });
+
+      res.status(StatusCodes.OK).json({ status: 'success', data: manager });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // GERENTE: Settings
+  // -----------------------------------------------------------------------
+
+  /**
+   * GET /api/admin/settings
+   */
+  async getSettings(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const settings = await settingsRepository.getAll();
+
+      res.status(StatusCodes.OK).json({ status: 'success', data: settings });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PUT /api/admin/settings
+   */
+  async updateSettings(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      await settingsRepository.setMany(req.body as Record<string, string>);
+      const settings = await settingsRepository.getAll();
+
+      res.status(StatusCodes.OK).json({ status: 'success', data: settings });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Debts
+  // -----------------------------------------------------------------------
+
+  /**
+   * POST /api/admin/debts
+   */
+  async createDebt(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { codigo, nome, grupo, distrito, semana, valor, dataVencimento, numeroNf, status } =
+        req.body as Record<string, string>;
+
+      const debt = await debtRepository.upsertByNf({
+        codigo,
+        nome,
+        grupo: grupo || '',
+        distrito: distrito || '',
+        semana: semana || '',
+        valor: parseFloat(valor),
+        diasAtraso: 0,
+        dataVencimento: new Date(dataVencimento),
+        numeroNf,
+        status: (status || 'PENDENTE') as 'PENDENTE' | 'ATRASADO' | 'PAGO',
+      });
+
+      res.status(StatusCodes.CREATED).json({ status: 'success', data: debt });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/admin/debts/:id/status
+   */
+  async updateDebtStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { status } = req.body as { status: 'PENDENTE' | 'ATRASADO' | 'PAGO' };
+      const debt = await debtRepository.update(String(req.params.id), { status });
+
+      res.status(StatusCodes.OK).json({ status: 'success', data: debt });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/admin/debts/weekly
+   */
+  async getWeeklyDebts(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { semana } = req.query as { semana?: string };
+      const where = semana ? { semana } : {};
+
+      const { data, total } = await debtRepository.findMany({ where });
+
+      res.status(StatusCodes.OK).json({ status: 'success', data, total });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/admin/debts/paid-today
+   */
+  async getPaidTodayDebts(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const today = new Date();
+
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const { data, total } = await debtRepository.findMany({
+        where: {
+          status: 'PAGO',
+          updatedAt: { gte: today, lt: tomorrow },
+        },
+      });
+
+      res.status(StatusCodes.OK).json({ status: 'success', data, total });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Clients (Consultores)
+  // -----------------------------------------------------------------------
+
+  /**
+   * GET /api/admin/clients
+   */
+  async listClients(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const pagination = getPagination(req.query as Record<string, unknown>);
+      const { grupo, distrito } = req.query as Record<string, string>;
+
+      const result = await userService.listUsers({
+        role: undefined,
+        grupo,
+        distrito,
+        isActive: true,
+        pagination,
+      });
+
+      res.status(StatusCodes.OK).json({ status: 'success', ...result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/admin/clients/:id
+   */
+  async updateClient(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { grupo, distrito } = req.body as { grupo?: string; distrito?: string };
+      const user = await userService.findById(String(req.params.id));
+
+      if (user.consultant) {
+        await consultantRepository.upsertByCpf({
+          codigo: user.consultant.codigo,
+          tipo: user.consultant.tipo,
+          grupo: grupo || user.consultant.grupo,
+          distrito: distrito || user.consultant.distrito,
+          cpf: user.consultant.cpf,
+        });
+      }
+
+      const updated = await userService.findById(String(req.params.id));
+
+      res.status(StatusCodes.OK).json({ status: 'success', data: updated });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Organization
+  // -----------------------------------------------------------------------
+
+  /**
+   * GET /api/admin/organization
+   */
+  async getOrganization(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { grupo, distrito } = req.query as Record<string, string>;
+
+      let consultants;
+
+      if (grupo && distrito) {
+        const byGrupo = await consultantRepository.findByGrupo(grupo);
+
+        consultants = byGrupo.filter((c) => c.distrito === distrito);
+      } else if (grupo) {
+        consultants = await consultantRepository.findByGrupo(grupo);
+      } else if (distrito) {
+        consultants = await consultantRepository.findByDistrito(distrito);
+      } else {
+        consultants = await consultantRepository.findByGrupo('');
+      }
+
+      res.status(StatusCodes.OK).json({ status: 'success', data: consultants });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Reports
+  // -----------------------------------------------------------------------
+
+  /**
+   * GET /api/admin/reports/paid-documents
+   */
+  async getPaidDocuments(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const pagination = getPagination(req.query as Record<string, unknown>);
+      const { dataInicio, dataFim } = req.query as Record<string, string>;
+
+      const where: Parameters<typeof paymentRepository.findMany>[0]['where'] = {
+        status: 'PAGO',
+      };
+
+      if (dataInicio || dataFim) {
+        where.createdAt = {};
+
+        if (dataInicio) (where.createdAt as Record<string, Date>).gte = new Date(dataInicio);
+
+        if (dataFim) (where.createdAt as Record<string, Date>).lte = new Date(dataFim);
+      }
+
+      const { data, total } = await paymentRepository.findMany({
+        where,
+        skip: pagination.skip,
+        take: pagination.limit,
+      });
+
+      res.status(StatusCodes.OK).json({
+        status: 'success',
+        data,
+        pagination: {
+          total,
+          page: pagination.page,
+          limit: pagination.limit,
+          totalPages: Math.ceil(total / pagination.limit),
+          hasNextPage: pagination.skip + pagination.limit < total,
+          hasPreviousPage: pagination.page > 1,
+        },
       });
     } catch (error) {
       next(error);

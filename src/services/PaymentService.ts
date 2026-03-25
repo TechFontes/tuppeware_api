@@ -3,9 +3,11 @@ import AppError from '../utils/AppError';
 import { getPaginationParams, paginatedResponse } from '../utils/pagination';
 import paymentRepository from '../repositories/PaymentRepository';
 import debtRepository from '../repositories/DebtRepository';
-import asaasService from './AsaasService';
+import eRedeService from './ERedeService';
 import webSocketService from './WebSocketService';
-import type { CreatePaymentDTO } from '../types';
+import savedCardService from './SavedCardService';
+import type { CreatePaymentDTO, ERedeCallbackPayload } from '../types';
+import type { Prisma } from '../../generated/prisma/client';
 
 const CREDIT_CARD_FEE_RATE = 0.05; // 5%
 
@@ -18,9 +20,11 @@ interface PaymentQuery {
 
 class PaymentService {
   /**
-   * Cria um pagamento e gera link via Asaas.
+   * Cria um pagamento na eRede.
    */
-  async create(userId: string, { debtIds, method, installments }: CreatePaymentDTO) {
+  async create(userId: string, payload: CreatePaymentDTO) {
+    const { debtIds, method, installments, card, billing, saveCard } = payload;
+
     // Busca os débitos selecionados
     const debts = await debtRepository.findByIds(debtIds);
 
@@ -48,22 +52,44 @@ class PaymentService {
       fee = subtotal * CREDIT_CARD_FEE_RATE;
       totalValue = subtotal + fee;
 
-      // Valida regras de parcelamento
       this._validateInstallments(totalValue, installments);
+
+      if (!card || !billing) {
+        throw new AppError(
+          'Dados de cartão e billing são obrigatórios para pagamento com cartão.',
+          StatusCodes.BAD_REQUEST,
+        );
+      }
     } else {
-      // PIX: sem parcelamento
       if (installments && installments > 1) {
         throw new AppError('PIX não permite parcelamento.', StatusCodes.BAD_REQUEST);
       }
+
+      if (!billing) {
+        throw new AppError('Dados de billing são obrigatórios para pagamento via gateway.', StatusCodes.BAD_REQUEST);
+      }
     }
 
-    // Gera link de pagamento via Asaas
-    const asaasPayment = await asaasService.createPaymentLink({
-      value: totalValue,
-      method,
-      installments: method === 'CARTAO_CREDITO' ? (installments || 1) : 1,
-      description: `Pagamento de ${debts.length} débito(s)`,
-    });
+    // Verifica limite de links ativos
+    await this._checkActiveLinksLimit(userId);
+
+    const referenceNum = this.generateReferenceNum(userId);
+    // eRede exige valor em centavos (inteiro)
+    const amountCents = Math.round(totalValue * 100);
+
+    // Monta payload para a eRede
+    const eredePayload = method === 'PIX'
+      ? eRedeService.buildPixPayload(referenceNum, amountCents)
+      : eRedeService.buildCreditPayload({
+          reference: referenceNum,
+          amountCents,
+          installments: installments || 1,
+          card: card!,
+          billing: billing!,
+        });
+
+    // Cria transação na eRede
+    const gatewayResponse = await eRedeService.createTransaction(eredePayload);
 
     // Cria o pagamento no banco
     const payment = await paymentRepository.create({
@@ -73,21 +99,57 @@ class PaymentService {
       subtotal,
       fee,
       totalValue,
-      paymentLink: asaasPayment.paymentLink,
-      asaasId: asaasPayment.id,
+      gatewayProvider: 'EREDE',
+      referenceNum,
+      gatewayTransactionId: gatewayResponse.tid || null,
+      gatewayOrderId: gatewayResponse.nsu || null,
+      gatewayStatusCode: gatewayResponse.returnCode,
+      gatewayStatusMessage: gatewayResponse.returnMessage,
+      processorReference: gatewayResponse.authorizationCode || null,
+      // PIX: link da imagem do QR code; cartão: null (aprovação síncrona)
+      paymentLink: gatewayResponse.pix?.link || null,
+      // String EMV para copiar-colar (PIX)
+      qrCode: gatewayResponse.pix?.qrCode || null,
       paymentDebts: {
         create: debtIds.map((debtId) => ({ debtId })),
       },
     });
+
+    // Atualiza status local conforme returnCode da eRede
+    await this.updateStatusByGatewayCode(payment.id, gatewayResponse.returnCode);
+
+    // Tokeniza e salva o cartão se solicitado e pagamento aprovado
+    if (method === 'CARTAO_CREDITO' && saveCard && card && gatewayResponse.returnCode === '00') {
+      try {
+        await savedCardService.tokenizeAndSave({
+          userId,
+          cardNumber: card.number,
+          expMonth: card.expMonth,
+          expYear: card.expYear,
+          holderName: card.holderName,
+        });
+      } catch (_) {
+        // Falha na tokenização não deve interromper o fluxo de pagamento
+      }
+    }
 
     // Emite evento via WebSocket
     webSocketService.emitToUser(userId, 'payment:created', {
       paymentId: payment.id,
       totalValue,
       method,
+      gatewayResponseCode: gatewayResponse.returnCode,
+      checkoutUrl: gatewayResponse.pix?.link || null,
+      qrCode: gatewayResponse.pix?.qrCode || null,
     });
 
-    return payment;
+    return {
+      ...payment,
+      checkoutUrl: gatewayResponse.pix?.link || null,
+      qrCode: gatewayResponse.pix?.qrCode || null,
+      gatewayResponseCode: gatewayResponse.returnCode,
+      gatewayResponseMessage: gatewayResponse.returnMessage,
+    };
   }
 
   /**
@@ -103,7 +165,7 @@ class PaymentService {
 
     if (query.search) {
       where.OR = [
-        { paymentDebts: { some: { debt: { numeroNf: { contains: query.search, mode: 'insensitive' } } } } },
+        { paymentDebts: { some: { debt: { numeroNf: { contains: query.search } } } } },
       ];
     }
 
@@ -134,19 +196,134 @@ class PaymentService {
   }
 
   /**
-   * Atualiza o status de um pagamento (usado por webhook/admin).
+   * Processa callback assíncrono da eRede.
+   */
+  async processGatewayCallback(callbackPayload: ERedeCallbackPayload) {
+    if (!eRedeService.validateCallbackSignature(callbackPayload)) {
+      throw new AppError('Payload de callback inválido.', StatusCodes.BAD_REQUEST);
+    }
+
+    const { tid, reference, returnCode, status: eredeStatus } = callbackPayload;
+
+    if (!tid && !reference) {
+      throw new AppError('Callback sem identificador de transação.', StatusCodes.BAD_REQUEST);
+    }
+
+    const payment = tid
+      ? await paymentRepository.findByGatewayTransactionId(tid)
+      : await paymentRepository.findByReferenceNum(reference);
+
+    if (!payment) {
+      throw new AppError('Pagamento não encontrado para callback.', StatusCodes.NOT_FOUND);
+    }
+
+    const localStatus = this.mapGatewayStatusToLocal(returnCode, eredeStatus);
+
+    // Idempotente: sem mudança se já está no mesmo estado
+    if (payment.gatewayStatusCode === returnCode && payment.status === localStatus) {
+      return payment;
+    }
+
+    const updated = await paymentRepository.update(payment.id, {
+      status: localStatus,
+      gatewayStatusCode: returnCode,
+      gatewayStatusMessage: String(eredeStatus ?? ''),
+      gatewayTransactionId: tid || payment.gatewayTransactionId,
+      callbackPayload: callbackPayload as unknown as Prisma.InputJsonValue,
+    });
+
+    if (localStatus === 'PAGO') {
+      const debtIds = updated.paymentDebts.map((pd: { debtId: string }) => pd.debtId);
+      await debtRepository.updateMany({ id: { in: debtIds } }, { status: 'PAGO' });
+    }
+
+    webSocketService.emitToUser(updated.userId, 'payment:updated', {
+      paymentId: updated.id,
+      status: updated.status,
+      gatewayStatusCode: returnCode,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Reativa um link de pagamento pendente.
+   * - Se foi criado hoje e ainda tem paymentLink → retorna o existente (PIX)
+   * - Se está expirado → cria nova transação na eRede
+   */
+  async reopenPayment(userId: string, paymentId: string) {
+    const payment = await paymentRepository.findById(paymentId);
+
+    if (!payment) {
+      throw new AppError('Pagamento não encontrado.', StatusCodes.NOT_FOUND);
+    }
+
+    if (payment.userId !== userId) {
+      throw new AppError('Acesso negado a este pagamento.', StatusCodes.FORBIDDEN);
+    }
+
+    if (payment.status !== 'PENDENTE') {
+      throw new AppError('Só é possível reabrir pagamentos pendentes.', StatusCodes.BAD_REQUEST);
+    }
+
+    // Verifica se foi criado hoje
+    const today = new Date();
+    const createdAt = new Date(payment.createdAt);
+    const isToday = createdAt.toDateString() === today.toDateString();
+
+    // Para PIX: se foi criado hoje e tem link, retorna o existente
+    if (isToday && payment.paymentLink && payment.method === 'PIX') {
+      return {
+        ...payment,
+        checkoutUrl: payment.paymentLink,
+        qrCode: payment.qrCode,
+        reopened: false,
+      };
+    }
+
+    // Para cartão ou PIX expirado: cria nova transação PIX (sem dados de cartão disponíveis)
+    // Para cartão expirado, o cliente precisa pagar novamente com cartão via nova tentativa
+    if (payment.method === 'CARTAO_CREDITO' && !isToday) {
+      throw new AppError(
+        'Pagamentos com cartão expirados precisam ser refeitos com uma nova transação.',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
+    // Gera novo referenceNum para nova transação PIX
+    const newReferenceNum = this.generateReferenceNum(userId);
+    const amountCents = Math.round(parseFloat(payment.totalValue.toString()) * 100);
+    const pixPayload = eRedeService.buildPixPayload(newReferenceNum, amountCents);
+    const gatewayResponse = await eRedeService.createTransaction(pixPayload);
+
+    const updated = await paymentRepository.update(payment.id, {
+      referenceNum: newReferenceNum,
+      gatewayTransactionId: gatewayResponse.tid || null,
+      gatewayStatusCode: gatewayResponse.returnCode,
+      gatewayStatusMessage: gatewayResponse.returnMessage,
+      paymentLink: gatewayResponse.pix?.link || null,
+      qrCode: gatewayResponse.pix?.qrCode || null,
+    });
+
+    return {
+      ...updated,
+      checkoutUrl: gatewayResponse.pix?.link || null,
+      qrCode: gatewayResponse.pix?.qrCode || null,
+      reopened: true,
+    };
+  }
+
+  /**
+   * Atualiza o status de um pagamento (usado por admin).
    */
   async updateStatus(paymentId: string, status: string) {
     const payment = await paymentRepository.update(paymentId, { status: status as 'PENDENTE' | 'PAGO' | 'CANCELADO' });
 
-    // Se pago, atualiza status dos débitos vinculados
     if (status === 'PAGO') {
       const debtIds = payment.paymentDebts.map((pd: { debtId: string }) => pd.debtId);
-
       await debtRepository.updateMany({ id: { in: debtIds } }, { status: 'PAGO' });
     }
 
-    // Emite evento via WebSocket
     webSocketService.emitToUser(payment.userId, 'payment:updated', {
       paymentId: payment.id,
       status,
@@ -186,6 +363,37 @@ class PaymentService {
         StatusCodes.BAD_REQUEST,
       );
     }
+  }
+
+  private mapGatewayStatusToLocal(
+    returnCode: string,
+    webhookStatus?: number,
+  ): 'PENDENTE' | 'PAGO' | 'CANCELADO' {
+    return eRedeService.mapStatusToLocal(returnCode, webhookStatus);
+  }
+
+  private async updateStatusByGatewayCode(paymentId: string, returnCode: string): Promise<void> {
+    const status = this.mapGatewayStatusToLocal(returnCode);
+    await this.updateStatus(paymentId, status);
+  }
+
+  private async _checkActiveLinksLimit(userId: string): Promise<void> {
+    const settingsRepository = await import('../repositories/SettingsRepository').then(m => m.default);
+    const maxLinksStr = await settingsRepository.get('max_active_payment_links');
+    const maxLinks = maxLinksStr ? parseInt(maxLinksStr, 10) : 5;
+    const activeCount = await paymentRepository.countPendingByUser(userId);
+
+    if (activeCount >= maxLinks) {
+      throw new AppError(
+        `Limite de ${maxLinks} link(s) de pagamento ativo(s) atingido.`,
+        StatusCodes.TOO_MANY_REQUESTS,
+      );
+    }
+  }
+
+  private generateReferenceNum(userId: string): string {
+    const shortUserId = userId.slice(0, 8);
+    return `TPW-${Date.now()}-${shortUserId}`;
   }
 }
 

@@ -36,6 +36,23 @@ class PaymentHistoryController {
       next(error);
     }
   }
+
+  /**
+   * POST /api/payment-history/:id/reopen
+   * Reabre um link de pagamento PIX pendente/expirado.
+   */
+  async reopen(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await paymentService.reopenPayment(req.user!.id, req.params.id as string);
+
+      res.status(StatusCodes.OK).json({
+        status: 'success',
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export default new PaymentHistoryController();

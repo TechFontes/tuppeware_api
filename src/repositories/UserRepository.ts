@@ -34,6 +34,13 @@ class UserRepository {
     });
   }
 
+  async softDelete(id: string): Promise<User> {
+    return await prisma.user.update({
+      where: { id },
+      data: { isActive: false },
+    });
+  }
+
   async delete(id: string): Promise<User> {
     return await prisma.user.delete({
       where: { id },
@@ -45,6 +52,26 @@ class UserRepository {
       include: { consultant: true },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async findMany({ where, orderBy, skip, take }: {
+    where?: Prisma.UserWhereInput;
+    orderBy?: Prisma.UserOrderByWithRelationInput;
+    skip?: number;
+    take?: number;
+  }) {
+    const [data, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        orderBy: orderBy || { createdAt: 'desc' },
+        skip,
+        take,
+        include: { consultant: true },
+      }),
+      prisma.user.count({ where }),
+    ]);
+
+    return { data, total };
   }
 }
 

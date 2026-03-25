@@ -1,0 +1,23 @@
+services:
+  tuppeware-api:
+    build: .
+    container_name: tuppeware-api
+    restart: unless-stopped
+    ports:
+      - "9987:3000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+    networks:
+      - easypanel
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tuppeware-api.rule=Host(`api.tupperwarees.com.br`)"
+      - "traefik.http.routers.tuppeware-api.entrypoints=websecure"
+      - "traefik.http.routers.tuppeware-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.tuppeware-api.loadbalancer.server.port=3000"
+
+networks:
+  easypanel:
+    external: true

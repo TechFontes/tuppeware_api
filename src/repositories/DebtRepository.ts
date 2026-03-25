@@ -49,7 +49,7 @@ class DebtRepository {
   async upsertByNf(data: Prisma.DebtUncheckedCreateInput): Promise<Debt> {
     return await prisma.debt.upsert({
       where: {
-        id: data.id || 'non-existent',
+        numeroNf: String(data.numeroNf),
       },
       update: {
         codigo: data.codigo,
@@ -60,7 +60,6 @@ class DebtRepository {
         valor: data.valor,
         diasAtraso: data.diasAtraso,
         dataVencimento: data.dataVencimento,
-        numeroNf: data.numeroNf,
         status: data.status,
       },
       create: data,

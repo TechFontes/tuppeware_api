@@ -6,6 +6,8 @@ export type {
   Payment,
   PaymentDebt,
   PasswordReset,
+  SavedCard,
+  Setting,
 } from '../../generated/prisma/client';
 
 export {
@@ -32,6 +34,28 @@ export interface CreatePaymentDTO {
   debtIds: string[];
   method: 'PIX' | 'CARTAO_CREDITO';
   installments?: number;
+  saveCard?: boolean;
+  card?: {
+    number: string;
+    expMonth: string;
+    expYear: string;
+    cvv: string;
+    holderName: string;
+  };
+  billing?: {
+    name: string;
+    email: string;
+    phone: string;
+    document: string;
+    birthDate: string;
+    address: string;
+    address2?: string;
+    district: string;
+    city: string;
+    state: string;
+    postalcode: string;
+    country?: string;
+  };
 }
 
 export interface PaginationParams {
@@ -58,14 +82,84 @@ export interface ImportResult {
   errors: Array<{ line: number; message: string }>;
 }
 
-export interface AsaasPaymentLink {
-  id: string;
-  paymentLink: string;
+// ==========================================
+// eRede Gateway Types
+// ==========================================
+
+export interface ERedeBillingAddress {
+  street: string;
+  number: string;
+  complement?: string;
+  district: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  country: string; // ISO alpha-3: "BRA"
 }
 
-export interface CreatePaymentLinkParams {
-  value: number;
-  method: string;
+export interface ERedeBilling {
+  name: string;
+  document: string; // CPF ou CNPJ, somente dígitos
+  email: string;
+  address: ERedeBillingAddress;
+}
+
+export interface ERedePixRequest {
+  kind: 'pix';
+  reference: string;
+  amount: number; // centavos
+  expirationDate: string; // ISO 8601
+}
+
+export interface ERedeCreditRequest {
+  kind: 'credit';
+  reference: string;
+  amount: number; // centavos
   installments: number;
-  description: string;
+  cardHolderName: string;
+  cardNumber: string;
+  expirationMonth: string;
+  expirationYear: string;
+  securityCode: string;
+  capture: true;
+  softDescriptor: string;
+  billing: ERedeBilling;
+}
+
+export type ERedeTransactionRequest = ERedePixRequest | ERedeCreditRequest;
+
+export interface ERedePixData {
+  qrCode: string;   // string EMV para copiar-colar
+  link: string;     // URL imagem do QR code
+  expirationDate: string;
+}
+
+export interface ERedeTransactionResponse {
+  tid: string;
+  returnCode: string;     // "00" = aprovado
+  returnMessage: string;
+  reference: string;
+  nsu?: string;
+  authorizationCode?: string;
+  dateTime?: string;
+  pix?: ERedePixData;
+  raw: Record<string, unknown>;
+}
+
+export interface ERedeQueryResponse {
+  tid: string;
+  returnCode: string;
+  returnMessage: string;
+  status: number;   // 0=aprovado, 3=pendente, 4=cancelado
+  amount: number;
+  reference: string;
+  raw: Record<string, unknown>;
+}
+
+export interface ERedeCallbackPayload {
+  tid: string;
+  returnCode: string;
+  status: number;
+  reference: string;
+  amount: number;
 }

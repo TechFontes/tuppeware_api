@@ -108,4 +108,51 @@ router.get('/', (req: Request, res: Response, next: NextFunction) => paymentHist
  */
 router.get('/:id', (req: Request, res: Response, next: NextFunction) => paymentHistoryController.show(req, res, next));
 
+/**
+ * @swagger
+ * /payment-history/{id}/reopen:
+ *   post:
+ *     tags: [PaymentHistory]
+ *     summary: Reabrir link de pagamento PIX
+ *     description: |
+ *       Reabre um link de pagamento PIX pendente.
+ *       - Se o link foi criado hoje e ainda é válido: retorna o link existente.
+ *       - Se o link está expirado: cria uma nova transação eRede e retorna novo QR code.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID do pagamento
+ *     responses:
+ *       200:
+ *         description: Link reaberto com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     checkoutUrl:
+ *                       type: string
+ *                     qrCode:
+ *                       type: string
+ *       400:
+ *         description: Pagamento não é PIX ou não está pendente
+ *       403:
+ *         description: Pagamento não pertence ao usuário
+ *       404:
+ *         description: Pagamento não encontrado
+ */
+router.post('/:id/reopen', (req: Request, res: Response, next: NextFunction) => paymentHistoryController.reopen(req, res, next));
+
 export default router;

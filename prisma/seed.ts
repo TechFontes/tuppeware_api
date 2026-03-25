@@ -126,9 +126,11 @@ async function main() {
   await prisma.paymentDebt.deleteMany();
   await prisma.payment.deleteMany();
   await prisma.passwordReset.deleteMany();
+  await prisma.savedCard.deleteMany();
   await prisma.debt.deleteMany();
   await prisma.consultant.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.setting.deleteMany();
   console.info('Tabelas limpas.\n');
 
   // 2. Hash da senha padrao
@@ -202,8 +204,15 @@ async function main() {
         fee: 0,
         totalValue: 89.90,
         status: 'PAGO',
-        paymentLink: 'https://sandbox.asaas.com/example-link',
-        asaasId: 'pay_seed_001',
+        gatewayProvider: 'EREDE',
+        referenceNum: 'SEED-REF-0001',
+        gatewayTransactionId: 'seed-trans-0001',
+        gatewayOrderId: 'seed-order-0001',
+        gatewayStatusCode: '00',
+        gatewayStatusMessage: 'SUCCESS',
+        processorReference: 'seed-auth-code',
+        paymentLink: null,
+        qrCode: null,
         paymentDebts: {
           create: {
             debtId: paidDebt.id,
@@ -214,6 +223,15 @@ async function main() {
 
     console.info(`  Pagamento ${payment.id} | PIX | R$ 89,90 | PAGO`);
   }
+
+  // 7. Cria configurações padrão
+  console.info('\nCriando configurações padrão...');
+  await prisma.setting.upsert({
+    where: { key: 'max_active_payment_links' },
+    update: { value: '5' },
+    create: { key: 'max_active_payment_links', value: '5' },
+  });
+  console.info('  max_active_payment_links = 5');
 
   // Resumo
   console.info('\n========================================');
