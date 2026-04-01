@@ -1,0 +1,147 @@
+# Gateway eRede — Contrato e Integração
+
+## Configuração
+
+| Variável de ambiente | Descrição |
+|---|---|
+| `EREDE_PV` | Número do estabelecimento (PV) |
+| `EREDE_INTEGRATION_KEY` | Chave de integração |
+| `EREDE_API_URL` | URL base da API (ex: `https://api.userede.com.br/erede/v1/transactions`) |
+| `EREDE_CALLBACK_SECRET` | Secret opcional para validação de callbacks |
+| `EREDE_PIX_EXPIRATION_HOURS` | Horas de expiração do QR Code PIX |
+| `EREDE_SOFT_DESCRIPTOR` | Texto que aparece na fatura do cartão |
+| `EREDE_TIMEOUT_MS` | Timeout de requisições em ms |
+
+**Autenticação:** Basic Auth com `Base64(PV:INTEGRATION_KEY)` no header `Authorization`.
+
+---
+
+## Endpoints utilizados
+
+| Método | Path | Descrição |
+|---|---|---|
+| `POST` | `/transactions` | Criar transação (PIX ou cartão) |
+| `GET` | `/transactions/{tid}` | Consultar status de transação |
+| `POST` | `/tokens` | Tokenizar cartão de crédito |
+
+---
+
+## Payload de criação — PIX
+
+```json
+{
+  "kind": "pix",
+  "reference": "TPW-1234567890-abcd1234",
+  "amount": 15000,
+  "expirationDate": "2026-04-02T10:00:00.000Z"
+}
+```
+
+**Resposta de sucesso:**
+```json
+{
+  "tid": "abc123",
+  "returnCode": "00",
+  "returnMessage": "Aprovado",
+  "reference": "TPW-1234567890-abcd1234",
+  "pix": {
+    "qrCode": "00020126...",
+    "link": "https://...",
+    "expirationDate": "2026-04-02T10:00:00.000Z"
+  }
+}
+```
+
+---
+
+## Payload de criação — Cartão de crédito
+
+```json
+{
+  "kind": "credit",
+  "reference": "TPW-1234567890-abcd1234",
+  "amount": 52500,
+  "installments": 2,
+  "cardHolderName": "JOAO DA SILVA",
+  "cardNumber": "4111111111111111",
+  "expirationMonth": "12",
+  "expirationYear": "2028",
+  "securityCode": "123",
+  "capture": true,
+  "softDescriptor": "TUPPEWARE",
+  "billing": {
+    "name": "Joao da Silva",
+    "document": "12345678901",
+    "email": "joao@email.com",
+    "address": {
+      "street": "Rua Exemplo",
+      "number": "S/N",
+      "complement": "",
+      "district": "Centro",
+      "city": "São Paulo",
+      "state": "SP",
+      "zipCode": "01310100",
+      "country": "BRA"
+    }
+  }
+}
+```
+
+**Nota:** O campo `country` deve ser ISO alpha-3 (BRA, USA, ARG). A aplicação converte automaticamente de alpha-2.
+
+---
+
+## Códigos de retorno
+
+| returnCode | Significado | Status local |
+|---|---|---|
+| `"00"` | Aprovado | `PAGO` |
+| outros | Recusado / erro | `CANCELADO` |
+
+**Webhook status numérico (callbacks assíncronos):**
+
+| status | Significado | Status local |
+|---|---|---|
+| `0` | Aprovado | `PAGO` |
+| `3` | Pendente | `PENDENTE` |
+| `4` | Cancelado | `CANCELADO` |
+
+---
+
+## Tokenização de cartão
+
+**Request:**
+```json
+{
+  "cardNumber": "4111111111111111",
+  "expirationMonth": "12",
+  "expirationYear": "2028",
+  "cardHolderName": "JOAO DA SILVA"
+}
+```
+
+**Response:**
+```json
+{
+  "token": "token-opaco",
+  "last4digits": "1111",
+  "brand": "VISA"
+}
+```
+
+---
+
+## Tratamento de erros
+
+| Cenário | Comportamento |
+|---|---|
+| `response.ok === false` | Lança `AppError` com mensagem do gateway (502) |
+| Timeout (AbortController) | Lança `AppError` 504 |
+| Falha de rede | Lança `AppError` 503 |
+| Credenciais ausentes | Lança `AppError` 500 antes de chamar o gateway |
+
+---
+
+## Validação de callbacks
+
+A eRede não usa HMAC. A validação atual verifica estrutura mínima (`tid` presente, `returnCode` definido). Segurança adicional deve ser garantida por HTTPS + whitelist de IPs do gateway no firewall.
