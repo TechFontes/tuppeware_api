@@ -101,6 +101,13 @@
 | RNF-17 | Logs HTTP via Morgan em todas as requisições |
 | RNF-18 | Documentação Swagger UI disponível em `/api/docs` |
 
+### Compatibilidade de API
+
+| # | Descrição |
+|---|---|
+| RNF-19 | Os modelos de input (body, params, query) e output (response shape) das rotas já existentes não devem ser alterados, salvo necessidade estritamente justificada por um requisito funcional ou correção de bug crítico. O frontend está em desenvolvimento ativo contra essas rotas. |
+| RNF-20 | Qualquer alteração de contrato em rota existente deve ser explicitamente comunicada e aprovada antes de ser implementada. |
+
 ---
 
 ## Formatos CSV
