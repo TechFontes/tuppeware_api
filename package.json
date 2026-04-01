@@ -13,7 +13,11 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "test": "vitest run --config vitest.config.ts",
+    "test:watch": "vitest --config vitest.config.ts",
+    "test:coverage": "vitest run --config vitest.config.ts --coverage",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "keywords": [
     "api",
@@ -56,15 +60,19 @@
     "@types/multer": "^2.0.0",
     "@types/node": "^25.2.3",
     "@types/nodemailer": "^7.0.9",
+    "@types/supertest": "^7.2.0",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
+    "@vitest/coverage-v8": "^4.1.2",
     "eslint": "^10.0.0",
     "eslint-config-prettier": "^10.1.8",
     "nodemon": "^3.1.11",
     "prettier": "^3.8.1",
     "prisma": "^7.3.0",
+    "supertest": "^7.2.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.55.0"
+    "typescript-eslint": "^8.55.0",
+    "vitest": "^4.1.2"
   }
 }
