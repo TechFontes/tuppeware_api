@@ -1,9 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { StatusCodes as HTTP } from 'http-status-codes';
-import AppError from '../utils/AppError';
 import userService from '../services/UserService';
-import savedCardRepository from '../repositories/SavedCardRepository';
+import savedCardService from '../services/SavedCardService';
 import type { Prisma } from '../../generated/prisma/client';
 
 class UserController {
@@ -64,7 +63,7 @@ class UserController {
    */
   async getSavedCards(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const cards = await savedCardRepository.findByUserId(req.user!.id);
+      const cards = await savedCardService.listByUser(req.user!.id);
 
       res.status(StatusCodes.OK).json({ status: 'success', data: cards });
     } catch (error) {
@@ -78,17 +77,7 @@ class UserController {
    */
   async deleteSavedCard(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const card = await savedCardRepository.findById(String(req.params.id));
-
-      if (!card) {
-        throw new AppError('Cartão não encontrado.', StatusCodes.NOT_FOUND);
-      }
-
-      if (card.userId !== req.user!.id) {
-        throw new AppError('Acesso negado.', StatusCodes.FORBIDDEN);
-      }
-
-      await savedCardRepository.delete(String(req.params.id));
+      await savedCardService.deleteCard(req.user!.id, String(req.params.id));
 
       res.status(StatusCodes.NO_CONTENT).send();
     } catch (error) {

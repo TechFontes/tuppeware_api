@@ -63,6 +63,36 @@ class DebtService {
   }
 
   /**
+   * Busca débito por ID verificando autorização hierárquica do usuário.
+   */
+  async authorizedFindById(id: string, user: DebtUser) {
+    const debt = await this.findById(id);
+
+    // ADMIN e GERENTE podem ver qualquer débito
+    if (user.role === 'ADMIN' || user.role === 'GERENTE') {
+      return debt;
+    }
+
+    // Roles hierárquicas precisam do consultor vinculado
+    const consultant = await consultantRepository.findByCpf(user.cpf);
+
+    if (!consultant) {
+      throw new AppError('Consultor não vinculado.', StatusCodes.FORBIDDEN);
+    }
+
+    const allowed =
+      (user.role === 'CONSULTOR' && (debt as any).codigo === consultant.codigo) ||
+      (user.role === 'LIDER' && (debt as any).grupo === consultant.grupo) ||
+      (user.role === 'EMPRESARIA' && (debt as any).distrito === consultant.distrito);
+
+    if (!allowed) {
+      throw new AppError('Acesso negado a este débito.', StatusCodes.FORBIDDEN);
+    }
+
+    return debt;
+  }
+
+  /**
    * Cria ou atualiza um débito (admin).
    */
   async adminCreateDebt(data: {

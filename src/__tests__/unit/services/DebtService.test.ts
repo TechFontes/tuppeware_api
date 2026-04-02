@@ -264,3 +264,101 @@ describe('DebtService — hierarquia: filtros query string não devem sobrepor r
     expect((call.where as any).grupo).toBeUndefined();
   });
 });
+
+describe('DebtService.authorizedFindById', () => {
+  it('ADMIN pode acessar qualquer débito', async () => {
+    vi.mocked(debtRepository.findById).mockResolvedValueOnce({
+      id: 'd1', codigo: 'C001', grupo: 'G1', distrito: 'D1', status: 'PENDENTE',
+    } as any);
+
+    const result = await debtService.authorizedFindById('d1', { role: 'ADMIN', cpf: '' });
+    expect(result.id).toBe('d1');
+  });
+
+  it('GERENTE pode acessar qualquer débito', async () => {
+    vi.mocked(debtRepository.findById).mockResolvedValueOnce({
+      id: 'd1', codigo: 'C001', grupo: 'G1', distrito: 'D1', status: 'PENDENTE',
+    } as any);
+
+    const result = await debtService.authorizedFindById('d1', { role: 'GERENTE', cpf: '' });
+    expect(result.id).toBe('d1');
+  });
+
+  it('CONSULTOR pode acessar débito com seu próprio codigo', async () => {
+    vi.mocked(debtRepository.findById).mockResolvedValueOnce({
+      id: 'd1', codigo: 'C001', grupo: 'G1', distrito: 'D1', status: 'PENDENTE',
+    } as any);
+    vi.mocked(consultantRepository.findByCpf).mockResolvedValueOnce({
+      id: 'c1', codigo: 'C001', grupo: 'G1', distrito: 'D1', tipo: 3,
+      cpf: '11144477735', userId: 'u1', createdAt: new Date(), updatedAt: new Date(),
+    } as any);
+
+    const result = await debtService.authorizedFindById('d1', { role: 'CONSULTOR', cpf: '11144477735' });
+    expect(result.id).toBe('d1');
+  });
+
+  it('CONSULTOR lança 403 para débito de outro código', async () => {
+    vi.mocked(debtRepository.findById).mockResolvedValueOnce({
+      id: 'd1', codigo: 'C999', grupo: 'G1', distrito: 'D1', status: 'PENDENTE',
+    } as any);
+    vi.mocked(consultantRepository.findByCpf).mockResolvedValueOnce({
+      id: 'c1', codigo: 'C001', grupo: 'G1', distrito: 'D1', tipo: 3,
+      cpf: '11144477735', userId: 'u1', createdAt: new Date(), updatedAt: new Date(),
+    } as any);
+
+    await expect(debtService.authorizedFindById('d1', { role: 'CONSULTOR', cpf: '11144477735' }))
+      .rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  it('EMPRESARIA pode acessar débito do seu distrito', async () => {
+    vi.mocked(debtRepository.findById).mockResolvedValueOnce({
+      id: 'd1', codigo: 'C001', grupo: 'G1', distrito: 'Norte', status: 'PENDENTE',
+    } as any);
+    vi.mocked(consultantRepository.findByCpf).mockResolvedValueOnce({
+      id: 'c1', codigo: 'C001', grupo: 'G1', distrito: 'Norte', tipo: 1,
+      cpf: '11144477735', userId: 'u1', createdAt: new Date(), updatedAt: new Date(),
+    } as any);
+
+    const result = await debtService.authorizedFindById('d1', { role: 'EMPRESARIA', cpf: '11144477735' });
+    expect(result.id).toBe('d1');
+  });
+
+  it('EMPRESARIA lança 403 para débito de outro distrito', async () => {
+    vi.mocked(debtRepository.findById).mockResolvedValueOnce({
+      id: 'd1', codigo: 'C001', grupo: 'G1', distrito: 'Sul', status: 'PENDENTE',
+    } as any);
+    vi.mocked(consultantRepository.findByCpf).mockResolvedValueOnce({
+      id: 'c1', codigo: 'C001', grupo: 'G1', distrito: 'Norte', tipo: 1,
+      cpf: '11144477735', userId: 'u1', createdAt: new Date(), updatedAt: new Date(),
+    } as any);
+
+    await expect(debtService.authorizedFindById('d1', { role: 'EMPRESARIA', cpf: '11144477735' }))
+      .rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  it('LIDER pode acessar débito do seu grupo', async () => {
+    vi.mocked(debtRepository.findById).mockResolvedValueOnce({
+      id: 'd1', codigo: 'C001', grupo: 'GrupoA', distrito: 'D1', status: 'PENDENTE',
+    } as any);
+    vi.mocked(consultantRepository.findByCpf).mockResolvedValueOnce({
+      id: 'c1', codigo: 'C001', grupo: 'GrupoA', distrito: 'D1', tipo: 2,
+      cpf: '11144477735', userId: 'u1', createdAt: new Date(), updatedAt: new Date(),
+    } as any);
+
+    const result = await debtService.authorizedFindById('d1', { role: 'LIDER', cpf: '11144477735' });
+    expect(result.id).toBe('d1');
+  });
+
+  it('LIDER lança 403 para débito de outro grupo', async () => {
+    vi.mocked(debtRepository.findById).mockResolvedValueOnce({
+      id: 'd1', codigo: 'C001', grupo: 'GrupoB', distrito: 'D1', status: 'PENDENTE',
+    } as any);
+    vi.mocked(consultantRepository.findByCpf).mockResolvedValueOnce({
+      id: 'c1', codigo: 'C001', grupo: 'GrupoA', distrito: 'D1', tipo: 2,
+      cpf: '11144477735', userId: 'u1', createdAt: new Date(), updatedAt: new Date(),
+    } as any);
+
+    await expect(debtService.authorizedFindById('d1', { role: 'LIDER', cpf: '11144477735' }))
+      .rejects.toMatchObject({ statusCode: 403 });
+  });
+});

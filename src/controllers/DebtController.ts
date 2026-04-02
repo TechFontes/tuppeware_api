@@ -26,11 +26,12 @@ class DebtController {
 
   /**
    * GET /api/debts/:id
-   * Busca um débito pelo ID.
+   * Busca um débito pelo ID respeitando a hierarquia de acesso.
    */
   async show(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const debt = await debtService.findById(req.params.id as string);
+      const user = await userService.findById(req.user!.id);
+      const debt = await debtService.authorizedFindById(req.params.id as string, user);
 
       res.status(StatusCodes.OK).json({
         status: 'success',
