@@ -125,6 +125,118 @@ describe('ERedeService.validateCallbackSignature', () => {
   });
 });
 
+describe('ERedeService.tokenizeCard', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('tokeniza cartão e retorna token, lastFour, brand', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ token: 'tok_abc', last4digits: '4242', brand: 'VISA' }),
+    }));
+    const svc = await getService();
+
+    const result = await svc.tokenizeCard({
+      number: '4242424242424242', expMonth: '12', expYear: '2028', holderName: 'Test User',
+    });
+
+    expect(result.token).toBe('tok_abc');
+    expect(result.lastFour).toBe('4242');
+    expect(result.brand).toBe('VISA');
+  });
+
+  it('lança AppError quando tokenização falha (response não ok)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ returnMessage: 'Cartão inválido' }),
+    }));
+    const svc = await getService();
+
+    await expect(svc.tokenizeCard({
+      number: '0000000000000000', expMonth: '01', expYear: '2020', holderName: 'Test',
+    })).rejects.toMatchObject({ statusCode: 502 });
+  });
+
+  it('lança AppError de timeout quando AbortController dispara', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
+      const err = new Error('AbortError');
+      err.name = 'AbortError';
+      return Promise.reject(err);
+    }));
+    const svc = await getService();
+
+    await expect(svc.tokenizeCard({
+      number: '4242424242424242', expMonth: '12', expYear: '2028', holderName: 'Test',
+    })).rejects.toMatchObject({ statusCode: 504 });
+  });
+});
+
+describe('ERedeService.queryTransaction', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('retorna dados da transação quando consulta bem-sucedida', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        tid: 'tid-123', returnCode: '00', returnMessage: 'OK',
+        status: 0, amount: 15000, reference: 'TPW-ref-1',
+      }),
+    }));
+    const svc = await getService();
+
+    const result = await svc.queryTransaction('tid-123');
+
+    expect(result.tid).toBe('tid-123');
+    expect(result.returnCode).toBe('00');
+    expect(result.amount).toBe(15000);
+  });
+
+  it('lança AppError quando consulta retorna status não-ok', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ returnMessage: 'TID não encontrado' }),
+    }));
+    const svc = await getService();
+
+    await expect(svc.queryTransaction('tid-invalido'))
+      .rejects.toMatchObject({ statusCode: 502 });
+  });
+});
+
+describe('ERedeService.buildCreditPayload — campos adicionais', () => {
+  it('constrói payload com amount, installments, cardNumber e zipCode corretos', async () => {
+    const svc = await getService();
+
+    const payload = svc.buildCreditPayload({
+      reference: 'TPW-ref-1',
+      amountCents: 30000,
+      installments: 2,
+      card: { number: '4111111111111111', expMonth: '12', expYear: '2028', cvv: '123', holderName: 'Test User' },
+      billing: { name: 'Test', document: '11144477735', email: 't@t.com', address: 'Rua A', address2: 'Apto 1', district: 'Centro', city: 'SP', state: 'SP', postalcode: '01001000' },
+    }) as any;
+
+    expect(payload.kind).toBe('credit');
+    expect(payload.amount).toBe(30000);
+    expect(payload.installments).toBe(2);
+    expect(payload.cardNumber).toBe('4111111111111111');
+    expect(payload.billing.address.zipCode).toBe('01001000');
+    expect(payload.billing.address.country).toBe('BRA');
+  });
+
+  it('normaliza país BR para BRA no billing', async () => {
+    const svc = await getService();
+
+    const payload = svc.buildCreditPayload({
+      reference: 'ref',
+      amountCents: 10000,
+      installments: 1,
+      card: { number: '4111111111111111', expMonth: '12', expYear: '2028', cvv: '123', holderName: 'Test' },
+      billing: { name: 'T', document: '111', email: 't@t.com', address: 'R', district: 'D', city: 'C', state: 'SP', postalcode: '00000000', country: 'BR' },
+    }) as any;
+
+    expect(payload.billing.address.country).toBe('BRA');
+  });
+});
+
 describe('ERedeService.createTransaction', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 

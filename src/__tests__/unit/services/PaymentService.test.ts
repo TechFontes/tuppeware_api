@@ -380,6 +380,77 @@ describe('PaymentService.create — atomicidade via status na criação (CRIT-03
   });
 });
 
+describe('PaymentService.updateStatus', () => {
+  it('atualiza status para PAGO e marca débitos como pagos', async () => {
+    vi.mocked(paymentRepository.update).mockResolvedValueOnce({
+      id: 'pay-1', userId: 'user-1', status: 'PAGO',
+      paymentDebts: [{ debtId: 'debt-1' }, { debtId: 'debt-2' }],
+    } as any);
+    vi.mocked(debtRepository.updateMany).mockResolvedValueOnce({ count: 2 } as any);
+
+    await paymentService.updateStatus('pay-1', 'PAGO');
+
+    expect(debtRepository.updateMany).toHaveBeenCalledWith(
+      { id: { in: ['debt-1', 'debt-2'] } },
+      { status: 'PAGO' },
+    );
+    expect(webSocketService.emitToUser).toHaveBeenCalledWith('user-1', 'payment:updated', expect.any(Object));
+  });
+
+  it('não atualiza débitos quando status é PENDENTE', async () => {
+    vi.mocked(paymentRepository.update).mockResolvedValueOnce({
+      id: 'pay-1', userId: 'user-1', status: 'PENDENTE',
+      paymentDebts: [{ debtId: 'debt-1' }],
+    } as any);
+
+    await paymentService.updateStatus('pay-1', 'PENDENTE');
+
+    expect(debtRepository.updateMany).not.toHaveBeenCalled();
+    expect(webSocketService.emitToUser).toHaveBeenCalledWith('user-1', 'payment:updated', expect.any(Object));
+  });
+
+  it('não atualiza débitos quando status é CANCELADO', async () => {
+    vi.mocked(paymentRepository.update).mockResolvedValueOnce({
+      id: 'pay-1', userId: 'user-1', status: 'CANCELADO',
+      paymentDebts: [{ debtId: 'debt-1' }],
+    } as any);
+
+    await paymentService.updateStatus('pay-1', 'CANCELADO');
+
+    expect(debtRepository.updateMany).not.toHaveBeenCalled();
+    expect(webSocketService.emitToUser).toHaveBeenCalledWith('user-1', 'payment:updated', expect.any(Object));
+  });
+});
+
+describe('PaymentService.listPaidDocuments', () => {
+  beforeEach(() => {
+    // findMany is not in the original mock definition; add it at runtime
+    if (!(paymentRepository as any).findMany) {
+      (paymentRepository as any).findMany = vi.fn();
+    } else {
+      vi.mocked((paymentRepository as any).findMany).mockReset();
+    }
+  });
+
+  it('lista pagamentos com status PAGO', async () => {
+    vi.mocked((paymentRepository as any).findMany).mockResolvedValueOnce({ data: [], total: 0 });
+
+    await paymentService.listPaidDocuments({ page: 1, limit: 10, skip: 0 });
+
+    const call = vi.mocked((paymentRepository as any).findMany).mock.calls[0][0];
+    expect((call.where as any).status).toBe('PAGO');
+  });
+
+  it('aplica filtro de dataInicio quando fornecido', async () => {
+    vi.mocked((paymentRepository as any).findMany).mockResolvedValueOnce({ data: [], total: 0 });
+
+    await paymentService.listPaidDocuments({ dataInicio: '2024-01-01', page: 1, limit: 10, skip: 0 });
+
+    const call = vi.mocked((paymentRepository as any).findMany).mock.calls[0][0];
+    expect((call.where as any).createdAt).toBeDefined();
+  });
+});
+
 describe('PaymentService.create — parcelamento baseado no subtotal (CRIT-04)', () => {
   // subtotal = 285, totalValue com 5% fee = 299.25 (< 300)
   // subtotal = 285 → max 1 parcela. Passando installments=2 deve falhar.
