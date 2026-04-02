@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import paymentService from '../services/PaymentService';
+import AppError from '../utils/AppError';
 import type { ERedeCallbackPayload } from '../types';
 
 class PaymentController {
@@ -28,6 +29,15 @@ class PaymentController {
    */
   async eredeCallback(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      const callbackSecret = process.env.EREDE_CALLBACK_SECRET;
+
+      if (callbackSecret) {
+        const headerSecret = req.headers['x-erede-secret'];
+        if (!headerSecret || headerSecret !== callbackSecret) {
+          throw new AppError('Acesso não autorizado ao callback.', StatusCodes.BAD_REQUEST);
+        }
+      }
+
       await paymentService.processGatewayCallback(req.body as ERedeCallbackPayload);
 
       res.status(StatusCodes.OK).json({
