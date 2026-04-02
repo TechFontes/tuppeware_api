@@ -320,6 +320,31 @@ class PaymentService {
   }
 
   /**
+   * Lista documentos pagos com filtros de data (admin).
+   */
+  async listPaidDocuments(params: {
+    dataInicio?: string;
+    dataFim?: string;
+    page: number;
+    limit: number;
+    skip: number;
+  }) {
+    const where: Record<string, unknown> = { status: 'PAGO' };
+
+    if (params.dataInicio || params.dataFim) {
+      where.createdAt = {};
+      if (params.dataInicio) (where.createdAt as Record<string, Date>).gte = new Date(params.dataInicio);
+      if (params.dataFim) (where.createdAt as Record<string, Date>).lte = new Date(params.dataFim);
+    }
+
+    return paymentRepository.findMany({
+      where: where as Parameters<typeof paymentRepository.findMany>[0]['where'],
+      skip: params.skip,
+      take: params.limit,
+    });
+  }
+
+  /**
    * Atualiza o status de um pagamento (usado por admin).
    */
   async updateStatus(paymentId: string, status: string) {

@@ -3,6 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import AppError from '../utils/AppError';
 import userRepository from '../repositories/UserRepository';
 import paymentRepository from '../repositories/PaymentRepository';
+import consultantRepository from '../repositories/ConsultantRepository';
 import type { Prisma, UserRole } from '../../generated/prisma/client';
 import type { PaginationParams } from '../types';
 
@@ -162,6 +163,39 @@ class UserService {
         hasPreviousPage: pagination.page > 1,
       },
     };
+  }
+
+  /**
+   * Atualiza grupo/distrito do consultor vinculado ao usuário (admin).
+   */
+  async updateClientConsultant(userId: string, data: { grupo?: string; distrito?: string }) {
+    const user = await this.findById(userId);
+    if (user.consultant) {
+      await consultantRepository.upsertByCpf({
+        codigo: user.consultant.codigo,
+        tipo: user.consultant.tipo,
+        grupo: data.grupo || user.consultant.grupo,
+        distrito: data.distrito || user.consultant.distrito,
+        cpf: user.consultant.cpf,
+      });
+    }
+    return this.findById(userId);
+  }
+
+  /**
+   * Busca consultores por grupo e/ou distrito (admin).
+   */
+  async getOrganization(params: { grupo?: string; distrito?: string }) {
+    if (params.grupo && params.distrito) {
+      const byGrupo = await consultantRepository.findByGrupo(params.grupo);
+      return byGrupo.filter((c) => c.distrito === params.distrito);
+    } else if (params.grupo) {
+      return consultantRepository.findByGrupo(params.grupo);
+    } else if (params.distrito) {
+      return consultantRepository.findByDistrito(params.distrito);
+    } else {
+      return consultantRepository.findByGrupo('');
+    }
   }
 
   async updateAdmin(id: string, data: { name?: string; email?: string }) {

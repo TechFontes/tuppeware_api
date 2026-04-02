@@ -63,6 +63,58 @@ class DebtService {
   }
 
   /**
+   * Cria ou atualiza um débito (admin).
+   */
+  async adminCreateDebt(data: {
+    codigo: string;
+    nome: string;
+    grupo: string;
+    distrito: string;
+    semana: string;
+    valor: number;
+    dataVencimento: Date;
+    numeroNf: string;
+    status: 'PENDENTE' | 'ATRASADO' | 'PAGO';
+  }) {
+    return debtRepository.upsertByNf({
+      ...data,
+      diasAtraso: 0,
+    });
+  }
+
+  /**
+   * Atualiza o status de um débito (admin).
+   */
+  async adminUpdateDebtStatus(id: string, status: 'PENDENTE' | 'ATRASADO' | 'PAGO') {
+    return debtRepository.update(id, { status });
+  }
+
+  /**
+   * Lista débitos por semana (admin).
+   */
+  async listByWeek(semana?: string) {
+    const where = semana ? { semana } : {};
+    return debtRepository.findMany({ where });
+  }
+
+  /**
+   * Lista débitos pagos hoje (admin).
+   */
+  async listPaidToday() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    return debtRepository.findMany({
+      where: {
+        status: 'PAGO',
+        updatedAt: { gte: today, lt: tomorrow },
+      },
+    });
+  }
+
+  /**
    * Constrói a cláusula WHERE baseada na hierarquia e filtros.
    */
   private async _buildWhereClause(user: DebtUser, query: DebtQuery): Promise<Prisma.DebtWhereInput> {

@@ -2,10 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import csvImportService from '../services/CsvImportService';
 import userService from '../services/UserService';
-import debtRepository from '../repositories/DebtRepository';
-import paymentRepository from '../repositories/PaymentRepository';
-import consultantRepository from '../repositories/ConsultantRepository';
-import settingsRepository from '../repositories/SettingsRepository';
+import debtService from '../services/DebtService';
+import paymentService from '../services/PaymentService';
+import settingsService from '../services/SettingsService';
 import type { UserRole, Prisma } from '../../generated/prisma/client';
 
 function getPagination(query: Record<string, unknown>) {
@@ -207,7 +206,7 @@ class AdminController {
    */
   async getSettings(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const settings = await settingsRepository.getAll();
+      const settings = await settingsService.getAll();
 
       res.status(StatusCodes.OK).json({ status: 'success', data: settings });
     } catch (error) {
@@ -220,8 +219,7 @@ class AdminController {
    */
   async updateSettings(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      await settingsRepository.setMany(req.body as Record<string, string>);
-      const settings = await settingsRepository.getAll();
+      const settings = await settingsService.setMany(req.body as Record<string, string>);
 
       res.status(StatusCodes.OK).json({ status: 'success', data: settings });
     } catch (error) {
@@ -241,14 +239,13 @@ class AdminController {
       const { codigo, nome, grupo, distrito, semana, valor, dataVencimento, numeroNf, status } =
         req.body as Record<string, string>;
 
-      const debt = await debtRepository.upsertByNf({
+      const debt = await debtService.adminCreateDebt({
         codigo,
         nome,
         grupo: grupo || '',
         distrito: distrito || '',
         semana: semana || '',
         valor: parseFloat(valor),
-        diasAtraso: 0,
         dataVencimento: new Date(dataVencimento),
         numeroNf,
         status: (status || 'PENDENTE') as 'PENDENTE' | 'ATRASADO' | 'PAGO',
@@ -266,7 +263,7 @@ class AdminController {
   async updateDebtStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { status } = req.body as { status: 'PENDENTE' | 'ATRASADO' | 'PAGO' };
-      const debt = await debtRepository.update(String(req.params.id), { status });
+      const debt = await debtService.adminUpdateDebtStatus(String(req.params.id), status);
 
       res.status(StatusCodes.OK).json({ status: 'success', data: debt });
     } catch (error) {
@@ -280,9 +277,7 @@ class AdminController {
   async getWeeklyDebts(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { semana } = req.query as { semana?: string };
-      const where = semana ? { semana } : {};
-
-      const { data, total } = await debtRepository.findMany({ where });
+      const { data, total } = await debtService.listByWeek(semana);
 
       res.status(StatusCodes.OK).json({ status: 'success', data, total });
     } catch (error) {
@@ -295,19 +290,7 @@ class AdminController {
    */
   async getPaidTodayDebts(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const today = new Date();
-
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-
-      tomorrow.setDate(tomorrow.getDate() + 1);
-
-      const { data, total } = await debtRepository.findMany({
-        where: {
-          status: 'PAGO',
-          updatedAt: { gte: today, lt: tomorrow },
-        },
-      });
+      const { data, total } = await debtService.listPaidToday();
 
       res.status(StatusCodes.OK).json({ status: 'success', data, total });
     } catch (error) {
@@ -347,19 +330,7 @@ class AdminController {
   async updateClient(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { grupo, distrito } = req.body as { grupo?: string; distrito?: string };
-      const user = await userService.findById(String(req.params.id));
-
-      if (user.consultant) {
-        await consultantRepository.upsertByCpf({
-          codigo: user.consultant.codigo,
-          tipo: user.consultant.tipo,
-          grupo: grupo || user.consultant.grupo,
-          distrito: distrito || user.consultant.distrito,
-          cpf: user.consultant.cpf,
-        });
-      }
-
-      const updated = await userService.findById(String(req.params.id));
+      const updated = await userService.updateClientConsultant(String(req.params.id), { grupo, distrito });
 
       res.status(StatusCodes.OK).json({ status: 'success', data: updated });
     } catch (error) {
@@ -377,20 +348,7 @@ class AdminController {
   async getOrganization(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { grupo, distrito } = req.query as Record<string, string>;
-
-      let consultants;
-
-      if (grupo && distrito) {
-        const byGrupo = await consultantRepository.findByGrupo(grupo);
-
-        consultants = byGrupo.filter((c) => c.distrito === distrito);
-      } else if (grupo) {
-        consultants = await consultantRepository.findByGrupo(grupo);
-      } else if (distrito) {
-        consultants = await consultantRepository.findByDistrito(distrito);
-      } else {
-        consultants = await consultantRepository.findByGrupo('');
-      }
+      const consultants = await userService.getOrganization({ grupo, distrito });
 
       res.status(StatusCodes.OK).json({ status: 'success', data: consultants });
     } catch (error) {
@@ -410,22 +368,12 @@ class AdminController {
       const pagination = getPagination(req.query as Record<string, unknown>);
       const { dataInicio, dataFim } = req.query as Record<string, string>;
 
-      const where: Parameters<typeof paymentRepository.findMany>[0]['where'] = {
-        status: 'PAGO',
-      };
-
-      if (dataInicio || dataFim) {
-        where.createdAt = {};
-
-        if (dataInicio) (where.createdAt as Record<string, Date>).gte = new Date(dataInicio);
-
-        if (dataFim) (where.createdAt as Record<string, Date>).lte = new Date(dataFim);
-      }
-
-      const { data, total } = await paymentRepository.findMany({
-        where,
+      const { data, total } = await paymentService.listPaidDocuments({
+        dataInicio,
+        dataFim,
+        page: pagination.page,
+        limit: pagination.limit,
         skip: pagination.skip,
-        take: pagination.limit,
       });
 
       res.status(StatusCodes.OK).json({
