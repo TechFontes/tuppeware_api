@@ -52,7 +52,7 @@ class PaymentService {
       fee = subtotal * CREDIT_CARD_FEE_RATE;
       totalValue = subtotal + fee;
 
-      this._validateInstallments(totalValue, installments);
+      this._validateInstallments(subtotal, installments);
 
       if (!card || !billing) {
         throw new AppError(
@@ -91,7 +91,10 @@ class PaymentService {
     // Cria transação na eRede
     const gatewayResponse = await eRedeService.createTransaction(eredePayload);
 
-    // Cria o pagamento no banco
+    // Determina status inicial com base no returnCode antes de criar o registro
+    const initialStatus = eRedeService.mapStatusToLocal(gatewayResponse.returnCode);
+
+    // Cria o pagamento no banco com status já definido (evita update separado pós-criação)
     const payment = await paymentRepository.create({
       userId,
       method,
@@ -99,6 +102,7 @@ class PaymentService {
       subtotal,
       fee,
       totalValue,
+      status: initialStatus,
       gatewayProvider: 'EREDE',
       referenceNum,
       gatewayTransactionId: gatewayResponse.tid || null,
@@ -115,8 +119,10 @@ class PaymentService {
       },
     });
 
-    // Atualiza status local conforme returnCode da eRede
-    await this.updateStatusByGatewayCode(payment.id, gatewayResponse.returnCode);
+    // Atualiza débitos se pagamento aprovado imediatamente
+    if (initialStatus === 'PAGO') {
+      await debtRepository.updateMany({ id: { in: debtIds } }, { status: 'PAGO' });
+    }
 
     // Tokeniza e salva o cartão se solicitado e pagamento aprovado
     if (method === 'CARTAO_CREDITO' && saveCard && card && gatewayResponse.returnCode === '00') {

@@ -308,3 +308,135 @@ describe('PaymentService.reopenPayment', () => {
     expect((result as any).reopened).toBe(false);
   });
 });
+
+describe('PaymentService.create — atomicidade via status na criação (CRIT-03)', () => {
+  it('NÃO chama paymentRepository.update durante create (status definido na criação)', async () => {
+    vi.mocked(debtRepository.findByIds).mockResolvedValueOnce([makeDebt('d1') as any]);
+    vi.mocked(eRedeService.mapStatusToLocal).mockReturnValue('PAGO');
+    vi.mocked(paymentRepository.create).mockResolvedValueOnce(makePayment('p1', 'PAGO') as any);
+
+    await paymentService.create('user-uuid-1', { debtIds: ['d1'], method: 'PIX', billing: billingBase });
+
+    expect(paymentRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('passa status correto para paymentRepository.create quando gateway aprova', async () => {
+    vi.mocked(debtRepository.findByIds).mockResolvedValueOnce([makeDebt('d1') as any]);
+    vi.mocked(eRedeService.mapStatusToLocal).mockReturnValue('PAGO');
+    let capturedStatus: string | undefined;
+    vi.mocked(paymentRepository.create).mockImplementationOnce(async (data: any) => {
+      capturedStatus = data.status;
+      return makePayment('p1', 'PAGO') as any;
+    });
+
+    await paymentService.create('user-uuid-1', { debtIds: ['d1'], method: 'PIX', billing: billingBase });
+
+    expect(capturedStatus).toBe('PAGO');
+  });
+
+  it('passa status PENDENTE para paymentRepository.create quando gateway retorna pendente', async () => {
+    vi.mocked(debtRepository.findByIds).mockResolvedValueOnce([makeDebt('d1') as any]);
+    vi.mocked(eRedeService.createTransaction).mockResolvedValueOnce({
+      tid: 'tid-pix', returnCode: '57', returnMessage: 'Pendente', reference: 'TPW-mock',
+      pix: { qrCode: '00020126...', link: 'https://pix.link', expirationDate: '2026-04-02T10:00:00Z' },
+      raw: {},
+    });
+    vi.mocked(eRedeService.mapStatusToLocal).mockReturnValue('PENDENTE');
+    let capturedStatus: string | undefined;
+    vi.mocked(paymentRepository.create).mockImplementationOnce(async (data: any) => {
+      capturedStatus = data.status;
+      return makePayment('p1', 'PENDENTE') as any;
+    });
+
+    await paymentService.create('user-uuid-1', { debtIds: ['d1'], method: 'PIX', billing: billingBase });
+
+    expect(capturedStatus).toBe('PENDENTE');
+    expect(paymentRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('atualiza débitos para PAGO quando status inicial é PAGO', async () => {
+    vi.mocked(debtRepository.findByIds).mockResolvedValueOnce([makeDebt('d1') as any]);
+    vi.mocked(eRedeService.mapStatusToLocal).mockReturnValue('PAGO');
+    vi.mocked(paymentRepository.create).mockResolvedValueOnce(makePayment('p1', 'PAGO') as any);
+
+    await paymentService.create('user-uuid-1', { debtIds: ['d1'], method: 'PIX', billing: billingBase });
+
+    expect(debtRepository.updateMany).toHaveBeenCalledWith({ id: { in: ['d1'] } }, { status: 'PAGO' });
+  });
+
+  it('NÃO atualiza débitos quando status inicial é PENDENTE', async () => {
+    vi.mocked(debtRepository.findByIds).mockResolvedValueOnce([makeDebt('d1') as any]);
+    vi.mocked(eRedeService.createTransaction).mockResolvedValueOnce({
+      tid: 'tid-pix', returnCode: '57', returnMessage: 'Pendente', reference: 'TPW-mock',
+      pix: { qrCode: '00020126...', link: 'https://pix.link', expirationDate: '2026-04-02T10:00:00Z' },
+      raw: {},
+    });
+    vi.mocked(eRedeService.mapStatusToLocal).mockReturnValue('PENDENTE');
+    vi.mocked(paymentRepository.create).mockResolvedValueOnce(makePayment('p1', 'PENDENTE') as any);
+
+    await paymentService.create('user-uuid-1', { debtIds: ['d1'], method: 'PIX', billing: billingBase });
+
+    expect(debtRepository.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('PaymentService.create — parcelamento baseado no subtotal (CRIT-04)', () => {
+  // subtotal = 285, totalValue com 5% fee = 299.25 (< 300)
+  // subtotal = 285 → max 1 parcela. Passando installments=2 deve falhar.
+  it('rejeita 2 parcelas quando subtotal é R$285 (< R$300), mesmo que totalValue seja próximo de R$300', async () => {
+    vi.mocked(debtRepository.findByIds).mockResolvedValueOnce([
+      makeDebt('d1', 'PENDENTE', 285) as any,
+    ]);
+
+    await expect(
+      paymentService.create('user-uuid-1', {
+        debtIds: ['d1'],
+        method: 'CARTAO_CREDITO',
+        installments: 2,
+        card: cardBase,
+        billing: billingBase,
+      }),
+    ).rejects.toMatchObject({ statusCode: StatusCodes.BAD_REQUEST });
+  });
+
+  // subtotal = 290, totalValue = 290 * 1.05 = 304.5 (>= 300)
+  // Com o bug (totalValue): 304.5 >= 300, installments=2 seria ACEITO → bug
+  // Com o fix (subtotal): 290 < 300, installments=2 deve ser REJEITADO → correto
+  it('rejeita 2 parcelas quando subtotal é R$290 mesmo que totalValue com taxa ultrapasse R$300', async () => {
+    vi.mocked(debtRepository.findByIds).mockResolvedValueOnce([
+      makeDebt('d1', 'PENDENTE', 290) as any,
+    ]);
+
+    await expect(
+      paymentService.create('user-uuid-1', {
+        debtIds: ['d1'],
+        method: 'CARTAO_CREDITO',
+        installments: 2,
+        card: cardBase,
+        billing: billingBase,
+      }),
+    ).rejects.toMatchObject({ statusCode: StatusCodes.BAD_REQUEST });
+  });
+
+  // subtotal = 300, totalValue = 300 * 1.05 = 315 → installments=2 deve ser ACEITO
+  it('aceita 2 parcelas quando subtotal é exatamente R$300', async () => {
+    vi.mocked(debtRepository.findByIds).mockResolvedValueOnce([
+      makeDebt('d1', 'PENDENTE', 300) as any,
+    ]);
+    vi.mocked(eRedeService.buildCreditPayload).mockReturnValueOnce({ kind: 'credit' } as any);
+    vi.mocked(eRedeService.createTransaction).mockResolvedValueOnce({
+      tid: 'tid-ok', returnCode: '00', returnMessage: 'Aprovado', reference: 'ref-ok',
+    } as any);
+    vi.mocked(eRedeService.mapStatusToLocal).mockReturnValueOnce('PAGO');
+    vi.mocked(paymentRepository.create).mockResolvedValueOnce(makePayment('pay-1') as any);
+
+    const result = await paymentService.create('user-uuid-1', {
+      debtIds: ['d1'],
+      method: 'CARTAO_CREDITO',
+      installments: 2,
+      card: cardBase,
+      billing: billingBase,
+    });
+    expect(result).toBeDefined();
+  });
+});
