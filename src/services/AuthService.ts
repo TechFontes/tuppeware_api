@@ -86,6 +86,10 @@ class AuthService {
       throw new AppError('E-mail ou senha incorretos.', StatusCodes.UNAUTHORIZED);
     }
 
+    if (!user.isActive) {
+      throw new AppError('Conta inativa. Entre em contato com o suporte.', StatusCodes.FORBIDDEN);
+    }
+
     const token = this._generateToken(user);
 
     return {

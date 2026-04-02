@@ -219,3 +219,35 @@ describe('AuthService.forgotPassword', () => {
     expect(passwordResetRepository.create).toHaveBeenCalled();
   });
 });
+
+describe('AuthService.login — conta inativa', () => {
+  it('lança 403 quando usuário está inativo', async () => {
+    const bcrypt = await import('bcryptjs');
+    const hash = await bcrypt.hash('Senha@123', 10);
+    vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(
+      makeMockUser({ password: hash, isActive: false }) as any,
+    );
+    await expect(authService.login({ email: 'test@email.com', password: 'Senha@123' }))
+      .rejects.toMatchObject({ statusCode: StatusCodes.FORBIDDEN });
+  });
+
+  it('mensagem de erro indica conta inativa', async () => {
+    const bcrypt = await import('bcryptjs');
+    const hash = await bcrypt.hash('Senha@123', 10);
+    vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(
+      makeMockUser({ password: hash, isActive: false }) as any,
+    );
+    const error: any = await authService.login({ email: 'test@email.com', password: 'Senha@123' }).catch(e => e);
+    expect(error.message).toContain('inativa');
+  });
+
+  it('login bem-sucedido para usuário ativo', async () => {
+    const bcrypt = await import('bcryptjs');
+    const hash = await bcrypt.hash('Senha@123', 10);
+    vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(
+      makeMockUser({ password: hash, isActive: true }) as any,
+    );
+    const result = await authService.login({ email: 'test@email.com', password: 'Senha@123' });
+    expect(result.token).toBeDefined();
+  });
+});
