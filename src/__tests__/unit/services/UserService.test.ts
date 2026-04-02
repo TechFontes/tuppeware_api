@@ -1,0 +1,310 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { StatusCodes } from 'http-status-codes';
+
+vi.mock('../../../repositories/UserRepository', () => ({
+  default: {
+    findById: vi.fn(),
+    findByEmail: vi.fn(),
+    findByCpf: vi.fn(),
+    findAll: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    softDelete: vi.fn(),
+  },
+}));
+
+vi.mock('../../../repositories/PaymentRepository', () => ({
+  default: {
+    findByUserId: vi.fn(),
+  },
+}));
+
+vi.mock('../../../repositories/ConsultantRepository', () => ({
+  default: {
+    upsertByCpf: vi.fn(),
+    findByGrupo: vi.fn(),
+    findByDistrito: vi.fn(),
+  },
+}));
+
+import userService from '../../../services/UserService';
+import userRepository from '../../../repositories/UserRepository';
+import paymentRepository from '../../../repositories/PaymentRepository';
+import consultantRepository from '../../../repositories/ConsultantRepository';
+
+const makeUser = (overrides: Record<string, unknown> = {}) => ({
+  id: 'user-1',
+  name: 'Test User',
+  cpf: '11144477735',
+  email: 'test@email.com',
+  password: '$2a$10$hashedpassword',
+  role: 'CONSULTOR' as const,
+  isActive: true,
+  phone: null,
+  birthDate: null,
+  address: null,
+  addressNumber: null,
+  addressComplement: null,
+  neighbourhood: null,
+  city: null,
+  state: null,
+  postalCode: null,
+  consultant: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  ...overrides,
+});
+
+const makePagination = () => ({ page: 1, limit: 10, skip: 0 });
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+// ------------------------------------------------------------------ findById
+describe('UserService.findById', () => {
+  it('retorna usuário sem password quando encontrado', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser() as any);
+    const result = await userService.findById('user-1');
+    expect(result.id).toBe('user-1');
+    expect((result as any).password).toBeUndefined();
+  });
+
+  it('lança 404 quando usuário não existe', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(null);
+    await expect(userService.findById('nao-existe'))
+      .rejects.toMatchObject({ statusCode: StatusCodes.NOT_FOUND });
+  });
+});
+
+// ----------------------------------------------------------------- findByEmail
+describe('UserService.findByEmail', () => {
+  it('retorna usuário sem password quando encontrado', async () => {
+    vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(makeUser() as any);
+    const result = await userService.findByEmail('test@email.com');
+    expect((result as any).password).toBeUndefined();
+  });
+
+  it('lança 404 quando e-mail não existe', async () => {
+    vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(null);
+    await expect(userService.findByEmail('nao@existe.com'))
+      .rejects.toMatchObject({ statusCode: StatusCodes.NOT_FOUND });
+  });
+});
+
+// -------------------------------------------------------------------- update
+describe('UserService.update', () => {
+  it('atualiza e retorna usuário sem password', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser() as any);
+    vi.mocked(userRepository.update).mockResolvedValueOnce(makeUser({ name: 'Novo Nome' }) as any);
+    const result = await userService.update('user-1', { name: 'Novo Nome' });
+    expect(result.name).toBe('Novo Nome');
+    expect((result as any).password).toBeUndefined();
+  });
+
+  it('lança 404 quando usuário não existe', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(null);
+    await expect(userService.update('nao-existe', { name: 'X' }))
+      .rejects.toMatchObject({ statusCode: StatusCodes.NOT_FOUND });
+  });
+});
+
+// -------------------------------------------------------------------- findAll
+describe('UserService.findAll', () => {
+  it('retorna lista de usuários sem password', async () => {
+    vi.mocked(userRepository.findAll).mockResolvedValueOnce([makeUser(), makeUser({ id: 'user-2' })] as any);
+    const result = await userService.findAll();
+    expect(result).toHaveLength(2);
+    result.forEach((u) => expect((u as any).password).toBeUndefined());
+  });
+});
+
+// ------------------------------------------------------------------ listUsers
+describe('UserService.listUsers', () => {
+  it('retorna paginação com shape correto', async () => {
+    vi.mocked(userRepository.findMany).mockResolvedValueOnce({ data: [makeUser()], total: 1 } as any);
+    const result = await userService.listUsers({ pagination: makePagination() });
+    expect(result.pagination.total).toBe(1);
+    expect(result.pagination.page).toBe(1);
+    expect(result.pagination.totalPages).toBe(1);
+    expect(result.data).toHaveLength(1);
+    expect((result.data[0] as any).password).toBeUndefined();
+  });
+
+  it('filtra por role quando fornecido', async () => {
+    vi.mocked(userRepository.findMany).mockResolvedValueOnce({ data: [], total: 0 } as any);
+    await userService.listUsers({ role: 'ADMIN', pagination: makePagination() });
+    expect(vi.mocked(userRepository.findMany).mock.calls[0][0].where).toMatchObject({ role: 'ADMIN' });
+  });
+
+  it('filtra por isActive quando fornecido', async () => {
+    vi.mocked(userRepository.findMany).mockResolvedValueOnce({ data: [], total: 0 } as any);
+    await userService.listUsers({ isActive: false, pagination: makePagination() });
+    expect(vi.mocked(userRepository.findMany).mock.calls[0][0].where).toMatchObject({ isActive: false });
+  });
+
+  it('filtra por grupo e distrito via consultant', async () => {
+    vi.mocked(userRepository.findMany).mockResolvedValueOnce({ data: [], total: 0 } as any);
+    await userService.listUsers({ grupo: 'G1', distrito: 'D1', pagination: makePagination() });
+    const where = vi.mocked(userRepository.findMany).mock.calls[0][0].where as any;
+    expect(where.consultant.is.grupo).toBe('G1');
+    expect(where.consultant.is.distrito).toBe('D1');
+  });
+});
+
+// --------------------------------------------------------------- deactivateUser
+describe('UserService.deactivateUser', () => {
+  it('chama softDelete e retorna usuário sem password', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser() as any);
+    vi.mocked(userRepository.softDelete).mockResolvedValueOnce(makeUser({ isActive: false }) as any);
+    const result = await userService.deactivateUser('user-1');
+    expect(result.isActive).toBe(false);
+    expect((result as any).password).toBeUndefined();
+    expect(userRepository.softDelete).toHaveBeenCalledWith('user-1');
+  });
+
+  it('lança 404 quando usuário não existe', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(null);
+    await expect(userService.deactivateUser('nao-existe'))
+      .rejects.toMatchObject({ statusCode: StatusCodes.NOT_FOUND });
+  });
+});
+
+// ------------------------------------------------------------- getUserPayments
+describe('UserService.getUserPayments', () => {
+  it('lança 404 quando usuário não existe', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(null);
+    await expect(userService.getUserPayments('nao-existe', makePagination()))
+      .rejects.toMatchObject({ statusCode: StatusCodes.NOT_FOUND });
+  });
+
+  it('retorna pagamentos do usuário quando encontrado', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser() as any);
+    vi.mocked(paymentRepository.findByUserId).mockResolvedValueOnce({ data: [], total: 0 } as any);
+    const result = await userService.getUserPayments('user-1', makePagination());
+    expect(paymentRepository.findByUserId).toHaveBeenCalledWith('user-1', expect.objectContaining({ skip: 0, take: 10 }));
+    expect(result).toBeDefined();
+  });
+});
+
+// --------------------------------------------------------------- createAdmin
+describe('UserService.createAdmin', () => {
+  it('lança 409 quando e-mail já está cadastrado', async () => {
+    vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(makeUser() as any);
+    await expect(userService.createAdmin({ name: 'Admin', cpf: '11144477735', email: 'test@email.com', password: 'Senha@123' }))
+      .rejects.toMatchObject({ statusCode: StatusCodes.CONFLICT });
+  });
+
+  it('cria usuário com role=ADMIN e retorna sem password', async () => {
+    vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(null);
+    vi.mocked(userRepository.create).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+    const result = await userService.createAdmin({ name: 'Admin', cpf: '11144477735', email: 'novo@email.com', password: 'Senha@123' });
+    const createCall = vi.mocked(userRepository.create).mock.calls[0][0];
+    expect(createCall.role).toBe('ADMIN');
+    expect((result as any).password).toBeUndefined();
+  });
+
+  it('senha é hashada com bcrypt antes de criar', async () => {
+    vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(null);
+    vi.mocked(userRepository.create).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+    await userService.createAdmin({ name: 'Admin', cpf: '11144477735', email: 'novo@email.com', password: 'Senha@123' });
+    const createCall = vi.mocked(userRepository.create).mock.calls[0][0];
+    expect(createCall.password).not.toBe('Senha@123');
+    expect(createCall.password).toMatch(/^\$2[ab]\$/);
+  });
+});
+
+// --------------------------------------------------------------- listAdmins
+describe('UserService.listAdmins', () => {
+  it('filtra por role=ADMIN e retorna paginação', async () => {
+    vi.mocked(userRepository.findMany).mockResolvedValueOnce({ data: [], total: 0 } as any);
+    const result = await userService.listAdmins(makePagination());
+    expect(vi.mocked(userRepository.findMany).mock.calls[0][0].where).toMatchObject({ role: 'ADMIN' });
+    expect(result.pagination).toBeDefined();
+  });
+});
+
+// --------------------------------------------------------------- updateAdmin
+describe('UserService.updateAdmin', () => {
+  it('lança 404 quando usuário não existe', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(null);
+    await expect(userService.updateAdmin('nao-existe', { name: 'X' }))
+      .rejects.toMatchObject({ statusCode: StatusCodes.NOT_FOUND });
+  });
+
+  it('lança 400 quando usuário não é ADMIN', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser({ role: 'CONSULTOR' }) as any);
+    await expect(userService.updateAdmin('user-1', { name: 'X' }))
+      .rejects.toMatchObject({ statusCode: StatusCodes.BAD_REQUEST });
+  });
+
+  it('atualiza e retorna sem password quando é ADMIN', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+    vi.mocked(userRepository.update).mockResolvedValueOnce(makeUser({ role: 'ADMIN', name: 'Novo' }) as any);
+    const result = await userService.updateAdmin('user-1', { name: 'Novo' });
+    expect((result as any).password).toBeUndefined();
+  });
+});
+
+// ------------------------------------------------- updateClientConsultant
+describe('UserService.updateClientConsultant', () => {
+  it('chama upsertByCpf com dados atualizados quando consultor vinculado', async () => {
+    const userWithConsultant = makeUser({
+      consultant: { id: 'c1', codigo: 'C001', tipo: 3, grupo: 'GrupoVelho', distrito: 'DistritoVelho', cpf: '11144477735', userId: 'user-1', createdAt: new Date(), updatedAt: new Date() },
+    });
+    // findById called twice: once in updateClientConsultant (via this.findById), once at the end
+    vi.mocked(userRepository.findById)
+      .mockResolvedValueOnce(userWithConsultant as any)
+      .mockResolvedValueOnce(userWithConsultant as any);
+    vi.mocked(consultantRepository.upsertByCpf).mockResolvedValueOnce({} as any);
+
+    await userService.updateClientConsultant('user-1', { grupo: 'GrupoNovo' });
+
+    expect(consultantRepository.upsertByCpf).toHaveBeenCalledWith(
+      expect.objectContaining({ grupo: 'GrupoNovo', distrito: 'DistritoVelho' }),
+    );
+  });
+
+  it('não chama upsertByCpf quando usuário não tem consultor', async () => {
+    const userWithoutConsultant = makeUser({ consultant: null });
+    vi.mocked(userRepository.findById)
+      .mockResolvedValueOnce(userWithoutConsultant as any)
+      .mockResolvedValueOnce(userWithoutConsultant as any);
+
+    await userService.updateClientConsultant('user-1', { grupo: 'G1' });
+
+    expect(consultantRepository.upsertByCpf).not.toHaveBeenCalled();
+  });
+});
+
+// --------------------------------------------------------------- getOrganization
+describe('UserService.getOrganization', () => {
+  it('filtra por grupo quando apenas grupo fornecido', async () => {
+    vi.mocked(consultantRepository.findByGrupo).mockResolvedValueOnce([]);
+    await userService.getOrganization({ grupo: 'G1' });
+    expect(consultantRepository.findByGrupo).toHaveBeenCalledWith('G1');
+  });
+
+  it('filtra por distrito quando apenas distrito fornecido', async () => {
+    vi.mocked(consultantRepository.findByDistrito).mockResolvedValueOnce([]);
+    await userService.getOrganization({ distrito: 'D1' });
+    expect(consultantRepository.findByDistrito).toHaveBeenCalledWith('D1');
+  });
+
+  it('filtra por grupo e depois por distrito quando ambos fornecidos', async () => {
+    vi.mocked(consultantRepository.findByGrupo).mockResolvedValueOnce([
+      { id: 'c1', distrito: 'D1' } as any,
+      { id: 'c2', distrito: 'D2' } as any,
+    ]);
+    const result = await userService.getOrganization({ grupo: 'G1', distrito: 'D1' });
+    expect(result).toHaveLength(1);
+    expect((result[0] as any).id).toBe('c1');
+  });
+
+  it('chama findByGrupo com string vazia quando nenhum filtro fornecido', async () => {
+    vi.mocked(consultantRepository.findByGrupo).mockResolvedValueOnce([]);
+    await userService.getOrganization({});
+    expect(consultantRepository.findByGrupo).toHaveBeenCalledWith('');
+  });
+});
