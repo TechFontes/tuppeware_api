@@ -108,12 +108,16 @@ class DebtService {
       ];
     }
 
-    if (query.grupo) {
-      where.grupo = query.grupo;
-    }
+    // Filtros de grupo e distrito apenas para ADMIN
+    // Roles hierárquicos já têm restrição aplicada acima e não podem ser sobrescritos
+    if (user.role === 'ADMIN') {
+      if (query.grupo) {
+        where.grupo = query.grupo;
+      }
 
-    if (query.distrito) {
-      where.distrito = query.distrito;
+      if (query.distrito) {
+        where.distrito = query.distrito;
+      }
     }
 
     if (query.status) {

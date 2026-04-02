@@ -182,3 +182,85 @@ describe('DebtService.findById', () => {
       .rejects.toMatchObject({ statusCode: StatusCodes.NOT_FOUND });
   });
 });
+
+describe('DebtService — hierarquia: filtros query string não devem sobrepor restrições de role', () => {
+  it('EMPRESARIA não pode sobrepor filtro de distrito via query string', async () => {
+    const consultantNorte = {
+      id: 'c1', codigo: 'C001', tipo: 1, grupo: 'G1', distrito: 'Norte',
+      cpf: '11144477735', userId: 'u1', createdAt: new Date(), updatedAt: new Date(),
+    };
+    vi.mocked(consultantRepository.findByCpf).mockResolvedValueOnce(consultantNorte as any);
+    vi.mocked(debtRepository.findMany).mockResolvedValueOnce({ data: [], total: 0 });
+
+    await debtService.list(
+      { role: 'EMPRESARIA', cpf: '11144477735' },
+      { distrito: 'Sul' }, // tenta sobrepor o distrito da EMPRESARIA
+    );
+
+    const call = vi.mocked(debtRepository.findMany).mock.calls[0][0];
+    // O where deve usar 'Norte' (do consultor), NÃO 'Sul' (da query string)
+    expect((call.where as any).distrito).toBe('Norte');
+  });
+
+  it('LIDER não pode sobrepor filtro de grupo via query string', async () => {
+    const consultantLider = {
+      id: 'c2', codigo: 'C002', tipo: 2, grupo: 'GrupoA', distrito: 'D1',
+      cpf: '22233344405', userId: 'u2', createdAt: new Date(), updatedAt: new Date(),
+    };
+    vi.mocked(consultantRepository.findByCpf).mockResolvedValueOnce(consultantLider as any);
+    vi.mocked(debtRepository.findMany).mockResolvedValueOnce({ data: [], total: 0 });
+
+    await debtService.list(
+      { role: 'LIDER', cpf: '22233344405' },
+      { grupo: 'GrupoInimigo' }, // tenta sobrepor o grupo do LIDER
+    );
+
+    const call = vi.mocked(debtRepository.findMany).mock.calls[0][0];
+    // O where deve usar 'GrupoA' (do consultor), NÃO 'GrupoInimigo' (da query string)
+    expect((call.where as any).grupo).toBe('GrupoA');
+  });
+
+  it('ADMIN pode filtrar por grupo via query string', async () => {
+    vi.mocked(debtRepository.findMany).mockResolvedValueOnce({ data: [], total: 0 });
+
+    await debtService.list(
+      { role: 'ADMIN', cpf: '' },
+      { grupo: 'GrupoEspecifico' },
+    );
+
+    const call = vi.mocked(debtRepository.findMany).mock.calls[0][0];
+    expect((call.where as any).grupo).toBe('GrupoEspecifico');
+  });
+
+  it('ADMIN pode filtrar por distrito via query string', async () => {
+    vi.mocked(debtRepository.findMany).mockResolvedValueOnce({ data: [], total: 0 });
+
+    await debtService.list(
+      { role: 'ADMIN', cpf: '' },
+      { distrito: 'Sul' },
+    );
+
+    const call = vi.mocked(debtRepository.findMany).mock.calls[0][0];
+    expect((call.where as any).distrito).toBe('Sul');
+  });
+
+  it('CONSULTOR não pode filtrar por grupo via query string', async () => {
+    const consultantConsultor = {
+      id: 'c3', codigo: 'COD123', tipo: 3, grupo: 'GrupoC', distrito: 'D3',
+      cpf: '33344455507', userId: 'u3', createdAt: new Date(), updatedAt: new Date(),
+    };
+    vi.mocked(consultantRepository.findByCpf).mockResolvedValueOnce(consultantConsultor as any);
+    vi.mocked(debtRepository.findMany).mockResolvedValueOnce({ data: [], total: 0 });
+
+    await debtService.list(
+      { role: 'CONSULTOR', cpf: '33344455507' },
+      { grupo: 'GrupoOutro' },
+    );
+
+    const call = vi.mocked(debtRepository.findMany).mock.calls[0][0];
+    // CONSULTOR filtra por codigo, não por grupo
+    expect((call.where as any).codigo).toBe('COD123');
+    // grupo da query não deve ser aplicado
+    expect((call.where as any).grupo).toBeUndefined();
+  });
+});
