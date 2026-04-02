@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { StatusCodes } from 'http-status-codes';
 import AppError from '../utils/AppError';
 import { parseCSV, CONSULTANT_COLUMNS, DEBT_COLUMNS, CLIENT_COLUMNS } from '../utils/csvParser';
@@ -271,8 +272,9 @@ class CsvImportService {
             });
           }
         } else {
-          // Cria usuário com senha inicial = CPF
-          const hashedPassword = await bcrypt.hash(cpf, 10);
+          // Cria usuário com senha inicial aleatória (nunca CPF)
+          const randomPassword = crypto.randomBytes(16).toString('hex');
+          const hashedPassword = await bcrypt.hash(randomPassword, 10);
           const user = await userRepository.create({
             name: record.name.trim(),
             cpf,

@@ -138,5 +138,7 @@ Enforced in `DebtService._buildWhereClause`:
 
 ### CSV import
 Admin routes accept multipart CSV uploads via Multer. `CsvImportService` handles debts; consultant import uses a similar flow. CSV delimiter is `;`.
-- Debts format: `codigo;nome;grupo;distrito;semana;valor;dias_atraso;data_vencimento;numero_nf`
+- Debts format: `codigo;nome;grupo;distrito;semana;valor;data_vencimento;numero_nf;status`
+  - `dias_atraso` is calculated automatically from `data_vencimento` (not in CSV)
+  - `status`: optional PENDENTE | ATRASADO | PAGO (auto-calculated if omitted)
 - Consultants format: `codigo;tipo;grupo;distrito;CPF`
