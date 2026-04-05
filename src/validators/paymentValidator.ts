@@ -20,26 +20,37 @@ const createPaymentValidator = [
     .isInt({ min: 1, max: 3 })
     .withMessage('Número de parcelas deve ser entre 1 e 3.'),
 
+  body('savedCardId')
+    .optional()
+    .isUUID()
+    .withMessage('ID do cartão salvo deve ser um UUID válido.'),
+
+  // Card fields obrigatórios apenas quando method=CARTAO_CREDITO e sem savedCardId
   body('card')
     .if(body('method').equals('CARTAO_CREDITO'))
+    .if((value: unknown, { req }: any) => !req.body.savedCardId)
     .isObject()
     .withMessage('Dados do cartão são obrigatórios para pagamento com cartão.'),
 
   body('card.number')
     .if(body('method').equals('CARTAO_CREDITO'))
+    .if((value: unknown, { req }: any) => !req.body.savedCardId)
     .isString()
     .withMessage('Número do cartão é obrigatório.'),
 
   body('card.expMonth')
     .if(body('method').equals('CARTAO_CREDITO'))
+    .if((value: unknown, { req }: any) => !req.body.savedCardId)
     .isString()
     .withMessage('Mês de expiração é obrigatório.'),
 
   body('card.expYear')
     .if(body('method').equals('CARTAO_CREDITO'))
+    .if((value: unknown, { req }: any) => !req.body.savedCardId)
     .isString()
     .withMessage('Ano de expiração é obrigatório.'),
 
+  // CVV obrigatório para CARTAO_CREDITO (com ou sem savedCardId)
   body('card.cvv')
     .if(body('method').equals('CARTAO_CREDITO'))
     .isString()
@@ -47,6 +58,7 @@ const createPaymentValidator = [
 
   body('card.holderName')
     .if(body('method').equals('CARTAO_CREDITO'))
+    .if((value: unknown, { req }: any) => !req.body.savedCardId)
     .isString()
     .withMessage('Nome do titular é obrigatório.'),
 
