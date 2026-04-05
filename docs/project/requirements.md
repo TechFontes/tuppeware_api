@@ -37,6 +37,8 @@
 | RF-19 | O processamento de callback deve ser idempotente (sem double-update para mesmo estado) |
 | RF-20 | O sistema deve permitir reabrir pagamento pendente: reutiliza link PIX do dia ou cria nova transação |
 | RF-21 | O sistema deve tokenizar e armazenar cartão quando `saveCard: true` e pagamento aprovado |
+| RF-28 | O sistema deve permitir salvar cartão de crédito via tokenização eRede independente de pagamento |
+| RF-29 | O sistema deve permitir pagamento com cartão salvo usando `savedCardId` + CVV |
 
 ### Admin
 
