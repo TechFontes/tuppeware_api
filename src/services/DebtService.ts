@@ -150,31 +150,21 @@ class DebtService {
   private async _buildWhereClause(user: DebtUser, query: DebtQuery): Promise<Prisma.DebtWhereInput> {
     const where: Prisma.DebtWhereInput = {};
 
-    // Filtros hierárquicos baseados no perfil
-    if (user.role === 'EMPRESARIA') {
+    // Roles hierárquicas precisam de consultor vinculado
+    if (['EMPRESARIA', 'LIDER', 'CONSULTOR'].includes(user.role)) {
       const consultant = await consultantRepository.findByCpf(user.cpf);
 
       if (!consultant) {
         throw new AppError('Consultor não vinculado.', StatusCodes.FORBIDDEN);
       }
 
-      where.distrito = consultant.distrito;
-    } else if (user.role === 'LIDER') {
-      const consultant = await consultantRepository.findByCpf(user.cpf);
-
-      if (!consultant) {
-        throw new AppError('Consultor não vinculado.', StatusCodes.FORBIDDEN);
+      if (user.role === 'EMPRESARIA') {
+        where.distrito = consultant.distrito;
+      } else if (user.role === 'LIDER') {
+        where.grupo = consultant.grupo;
+      } else if (user.role === 'CONSULTOR') {
+        where.codigo = consultant.codigo;
       }
-
-      where.grupo = consultant.grupo;
-    } else if (user.role === 'CONSULTOR') {
-      const consultant = await consultantRepository.findByCpf(user.cpf);
-
-      if (!consultant) {
-        throw new AppError('Consultor não vinculado.', StatusCodes.FORBIDDEN);
-      }
-
-      where.codigo = consultant.codigo;
     }
     // ADMIN e GERENTE: sem filtro hierárquico (veem todos os débitos)
 

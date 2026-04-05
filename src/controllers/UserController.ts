@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
-import { StatusCodes as HTTP } from 'http-status-codes';
 import userService from '../services/UserService';
 import savedCardService from '../services/SavedCardService';
 import type { Prisma } from '../../generated/prisma/client';
@@ -51,7 +50,7 @@ class UserController {
 
       const user = await userService.update(req.user!.id, updateData);
 
-      res.status(HTTP.OK).json({ status: 'success', data: user });
+      res.status(StatusCodes.OK).json({ status: 'success', data: user });
     } catch (error) {
       next(error);
     }

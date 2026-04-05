@@ -4,6 +4,7 @@ import { StatusCodes } from 'http-status-codes';
 import AppError from '../utils/AppError';
 import { parseCSV, CONSULTANT_COLUMNS, DEBT_COLUMNS, CLIENT_COLUMNS } from '../utils/csvParser';
 import { cleanCPF, isValidCPF } from '../utils/cpfValidator';
+import { TIPO_TO_ROLE } from '../utils/constants';
 import consultantRepository from '../repositories/ConsultantRepository';
 import debtRepository from '../repositories/DebtRepository';
 import userRepository from '../repositories/UserRepository';
@@ -107,15 +108,11 @@ class CsvImportService {
           if (user) {
             await consultantRepository.linkToUser(consultant.id, user.id);
 
-            const roleMap: Record<number, string> = { 1: 'EMPRESARIA', 2: 'LIDER', 3: 'CONSULTOR' };
-
-            await userRepository.update(user.id, { role: (roleMap[tipo] || 'CONSULTOR') as 'EMPRESARIA' | 'LIDER' | 'CONSULTOR' });
+            await userRepository.update(user.id, { role: (TIPO_TO_ROLE[tipo] || 'CONSULTOR') as 'EMPRESARIA' | 'LIDER' | 'CONSULTOR' });
           }
         } else {
           // Atualiza role caso o tipo tenha mudado
-          const roleMap: Record<number, string> = { 1: 'EMPRESARIA', 2: 'LIDER', 3: 'CONSULTOR' };
-
-          await userRepository.update(consultant.userId, { role: (roleMap[tipo] || 'CONSULTOR') as 'EMPRESARIA' | 'LIDER' | 'CONSULTOR' });
+          await userRepository.update(consultant.userId, { role: (TIPO_TO_ROLE[tipo] || 'CONSULTOR') as 'EMPRESARIA' | 'LIDER' | 'CONSULTOR' });
         }
 
         results.success++;

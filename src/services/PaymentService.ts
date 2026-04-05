@@ -439,11 +439,6 @@ class PaymentService {
     return eRedeService.mapStatusToLocal(returnCode, webhookStatus);
   }
 
-  private async updateStatusByGatewayCode(paymentId: string, returnCode: string): Promise<void> {
-    const status = this.mapGatewayStatusToLocal(returnCode);
-    await this.updateStatus(paymentId, status);
-  }
-
   private async _checkActiveLinksLimit(userId: string): Promise<void> {
     const settingsRepository = await import('../repositories/SettingsRepository').then(m => m.default);
     const maxLinksStr = await settingsRepository.get('max_active_payment_links');

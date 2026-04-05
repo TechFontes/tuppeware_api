@@ -6,6 +6,7 @@ import { StatusCodes } from 'http-status-codes';
 import AppError from '../utils/AppError';
 import { cleanCPF, isValidCPF } from '../utils/cpfValidator';
 import { jwtSecret, jwtExpiresIn } from '../config/auth';
+import { TIPO_TO_ROLE } from '../utils/constants';
 import userRepository from '../repositories/UserRepository';
 import consultantRepository from '../repositories/ConsultantRepository';
 import passwordResetRepository from '../repositories/PasswordResetRepository';
@@ -55,8 +56,7 @@ class AuthService {
       await consultantRepository.linkToUser(consultant.id, user.id);
 
       // Atualiza a role do usuário baseado no tipo do consultor
-      const roleMap: Record<number, string> = { 1: 'EMPRESARIA', 2: 'LIDER', 3: 'CONSULTOR' };
-      const role = roleMap[consultant.tipo] || 'CONSULTOR';
+      const role = TIPO_TO_ROLE[consultant.tipo] || 'CONSULTOR';
 
       await userRepository.update(user.id, { role: role as User['role'] });
       user.role = role as User['role'];
