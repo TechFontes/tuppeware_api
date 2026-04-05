@@ -85,9 +85,27 @@ Rastreabilidade: cada critério referencia o(s) requisito(s) que valida.
 
 ---
 
+## Cartão salvo (RF-28, RF-29)
+
+| # | Critério | Requisitos |
+|---|---|---|
+| AC-49 | `POST /users/me/saved-cards` com dados válidos tokeniza via eRede e retorna 201 com `id`, `lastFour`, `cardBrand`, `holderName`, `createdAt` | RF-28 |
+| AC-50 | Response de `POST /users/me/saved-cards` não expõe o `token` opaco da eRede | RF-28 |
+| AC-51 | Cartão duplicado (mesmo token) não cria registro novo | RF-28 |
+| AC-52 | Pagamento com `savedCardId` válido + `card.cvv` é aceito; payload eRede usa `cardToken` | RF-29 |
+| AC-53 | Pagamento com `savedCardId` de outro usuário retorna 403 | RF-29 |
+| AC-54 | Pagamento com `savedCardId` sem `card.cvv` retorna 400 | RF-29 |
+| AC-55 | Pagamento com `savedCardId` inexistente retorna 404 | RF-29 |
+| AC-56 | Callback com status CANCELADO reverte débitos vinculados para PENDENTE | RF-18 |
+| AC-57 | Admin atualiza pagamento para CANCELADO; débitos vinculados voltam para PENDENTE | RF-25 |
+
+---
+
 ## WebSocket (RF-26, RF-27)
 
 | # | Critério | Requisitos |
 |---|---|---|
 | AC-47 | Após criação de pagamento, evento `payment:created` é emitido na sala `userId` | RF-26 |
 | AC-48 | Após callback atualizar status, evento `payment:updated` é emitido na sala `userId` | RF-27 |
+| AC-58 | WebSocket `register` exige JWT válido; token inválido recebe `auth_error` | RF-26, RF-27 |
+| AC-59 | WebSocket `register` sem token não entra em nenhuma sala | RF-26, RF-27 |

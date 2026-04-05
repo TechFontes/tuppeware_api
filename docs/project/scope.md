@@ -11,7 +11,7 @@ A rede é estruturada em quatro níveis hierárquicos:
 | Role | Visibilidade de Débitos |
 |---|---|
 | ADMIN | Todos os débitos do sistema |
-| GERENTE | — (papel presente no schema, sem regra de visibilidade implementada — tratar como ADMIN) |
+| GERENTE | Todos os débitos do sistema (mesma visibilidade que ADMIN, com filtros por grupo/distrito) |
 | EMPRESARIA | Débitos do seu distrito |
 | LIDER | Débitos do seu grupo |
 | CONSULTOR | Débitos vinculados ao seu código de consultora |

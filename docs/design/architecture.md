@@ -62,14 +62,14 @@ MariaDB
 Implementada em `DebtService._buildWhereClause`:
 
 ```
-ADMIN       → sem filtro (vê todos)
-GERENTE     → sem filtro (tratado como ADMIN até implementação específica)
+ADMIN       → sem filtro (vê todos) + pode filtrar por grupo/distrito via query
+GERENTE     → sem filtro (vê todos) + pode filtrar por grupo/distrito via query
 EMPRESARIA  → where.distrito = consultant.distrito
 LIDER       → where.grupo = consultant.grupo
 CONSULTOR   → where.codigo = consultant.codigo
 ```
 
-O CPF não está no JWT. O Service busca o `Consultant` pelo `req.user.cpf` (populado pelo authMiddleware).
+O CPF não está no JWT. O Service busca o `Consultant` pelo `req.user.cpf` (populado pelo authMiddleware). A busca de consultor é feita uma única vez para roles hierárquicas (EMPRESARIA/LIDER/CONSULTOR).
 
 ---
 
@@ -81,16 +81,17 @@ O CPF não está no JWT. O Service busca o `Consultant` pelo `req.user.cpf` (pop
 2. Calcular `subtotal` (soma dos valores)
 3. Se CARTAO_CREDITO: aplicar fee 5% → `totalValue = subtotal * 1.05`
 4. Validar regras de parcelamento (ver RF-14)
-5. Verificar limite de links ativos (`settings.max_active_payment_links`, padrão 5)
-6. Gerar `referenceNum = TPW-{Date.now()}-{userId[0:8]}`
-7. Converter para centavos: `Math.round(totalValue * 100)`
-8. Montar payload eRede via `ERedeService.buildPixPayload` ou `buildCreditPayload`
-9. Chamar `ERedeService.createTransaction` (POST para eRede)
-10. Salvar pagamento no banco com status inicial
-11. `updateStatusByGatewayCode` → mapear `returnCode` → `PAGO/PENDENTE/CANCELADO`
-12. Se CARTAO + `saveCard` + aprovado: tokenizar cartão (falha silenciosa)
-13. Emitir `payment:created` via WebSocket
-14. Retornar payment + `checkoutUrl` + `qrCode`
+5. Se `savedCardId` presente: buscar cartão salvo, validar propriedade (403), exigir CVV
+6. Verificar limite de links ativos (`settings.max_active_payment_links`, padrão 5)
+7. Gerar `referenceNum = TPW-{Date.now()}-{userId[0:8]}`
+8. Converter para centavos: `Math.round(totalValue * 100)`
+9. Montar payload eRede via `buildPixPayload` ou `buildCreditPayload` (com `cardToken` se cartão salvo)
+10. Chamar `ERedeService.createTransaction` (POST para eRede)
+11. Salvar pagamento no banco com status inicial mapeado do `returnCode`
+12. Se `PAGO`: marcar débitos vinculados como `PAGO`
+13. Se CARTAO + `saveCard` + aprovado: tokenizar cartão (falha silenciosa)
+14. Emitir `payment:created` via WebSocket
+15. Retornar payment + `checkoutUrl` + `qrCode`
 
 ### Callback (POST /api/payments/callback)
 
@@ -100,18 +101,43 @@ O CPF não está no JWT. O Service busca o `Consultant` pelo `req.user.cpf` (pop
 4. Checar idempotência — se já está no mesmo estado, retornar sem update
 5. Atualizar payment no banco
 6. Se `PAGO`: atualizar débitos vinculados para `PAGO`
-7. Emitir `payment:updated` via WebSocket
+7. Se `CANCELADO`: reverter débitos vinculados para `PENDENTE`
+8. Emitir `payment:updated` via WebSocket
+
+### Atualização manual de status (admin)
+
+1. Atualizar status do pagamento
+2. Se `PAGO`: marcar débitos vinculados como `PAGO`
+3. Se `CANCELADO`: reverter débitos vinculados para `PENDENTE`
+4. Emitir `payment:updated` via WebSocket
 
 ---
 
 ## WebSocket
 
-`WebSocketService` encapsula Socket.IO. Cada usuário entra em uma sala identificada por seu `userId`. Eventos emitidos:
+`WebSocketService` encapsula Socket.IO. A conexão exige autenticação JWT.
+
+**Registro:** O cliente envia `register` com o JWT token (não mais o userId direto). O servidor verifica o token com `jwt.verify` e extrai o `userId` do payload. Tokens inválidos recebem evento `auth_error`.
+
+```
+Cliente → register(jwtToken) → Servidor verifica → join(user:{userId})
+```
 
 | Evento | Quando |
 |---|---|
 | `payment:created` | Após `PaymentService.create` |
 | `payment:updated` | Após `PaymentService.processGatewayCallback` ou `updateStatus` |
+| `auth_error` | Quando o token enviado no `register` é inválido |
+
+---
+
+## Cartão salvo (RF-28, RF-29)
+
+**Salvar cartão independente:** `POST /api/users/me/saved-cards` → `SavedCardService.tokenizeAndSave` → `ERedeService.tokenizeCard` (POST /tokens na eRede) → salva token opaco no banco. O token nunca é exposto ao frontend — response inclui apenas `id`, `lastFour`, `cardBrand`, `holderName`, `createdAt`.
+
+**Pagar com cartão salvo:** `POST /api/payments` com `savedCardId` + `card.cvv`. O `PaymentService` busca o cartão, valida propriedade, e passa `cardToken` para `buildCreditPayload` em vez de `cardNumber`. CVV é sempre obrigatório (PCI: nunca armazenado).
+
+**Validação condicional:** Quando `savedCardId` presente, os campos `card.number`, `card.expMonth`, `card.expYear`, `card.holderName` não são obrigatórios. Apenas `card.cvv` é exigido.
 
 ---
 

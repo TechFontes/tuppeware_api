@@ -131,6 +131,28 @@
 
 ---
 
+## Pagamento com cartão tokenizado (savedCardId)
+
+Quando o pagamento usa um cartão previamente salvo, o payload de criação de transação envia `cardToken` em vez de `cardNumber`:
+
+```json
+{
+  "kind": "credit",
+  "reference": "TPW-1234567890-abcd1234",
+  "amount": 52500,
+  "installments": 2,
+  "cardToken": "token-opaco-da-erede",
+  "securityCode": "123",
+  "capture": true,
+  "softDescriptor": "TUPPEWARE",
+  "billing": { ... }
+}
+```
+
+**Nota:** O nome do campo `cardToken` foi inferido do SDK PHP da eRede (`storageCard`). Precisa ser validado contra a sandbox real da API REST. Se o campo correto for diferente (ex: `storageCard`), ajustar em `ERedeService.buildCreditPayload`.
+
+---
+
 ## Tratamento de erros
 
 | Cenário | Comportamento |

@@ -70,6 +70,9 @@
 | RNF-04 | Headers de segurança via Helmet |
 | RNF-05 | CORS configurado |
 | RNF-06 | CPF não deve ser incluído no payload do JWT |
+| RNF-21 | WebSocket `register` deve exigir JWT válido (não aceitar userId direto) |
+| RNF-22 | Admin `updateUser` deve usar whitelist de campos (impedir escalação de role ou password plaintext) |
+| RNF-23 | `SettingsService.setMany` deve validar chaves e valores contra whitelist de settings conhecidas |
 
 ### Confiabilidade
 
@@ -114,6 +117,8 @@
 
 ## Formatos CSV
 
-**Débitos:** `codigo;nome;grupo;distrito;semana;valor;dias_atraso;data_vencimento;numero_nf`
+**Débitos:** `codigo;nome;grupo;distrito;semana;valor;data_vencimento;numero_nf;status`
+- `dias_atraso` é calculado automaticamente a partir de `data_vencimento` (não incluído no CSV)
+- `status` é opcional: PENDENTE | ATRASADO | PAGO (auto-calculado se omitido)
 
 **Consultoras:** `codigo;tipo;grupo;distrito;CPF`
