@@ -176,7 +176,7 @@ class DebtService {
 
       where.codigo = consultant.codigo;
     }
-    // ADMIN: sem filtro hierárquico
+    // ADMIN e GERENTE: sem filtro hierárquico (veem todos os débitos)
 
     // Filtros da query string
     if (query.search) {
@@ -190,9 +190,9 @@ class DebtService {
       ];
     }
 
-    // Filtros de grupo e distrito apenas para ADMIN
+    // Filtros de grupo e distrito para ADMIN e GERENTE
     // Roles hierárquicos já têm restrição aplicada acima e não podem ser sobrescritos
-    if (user.role === 'ADMIN') {
+    if (user.role === 'ADMIN' || user.role === 'GERENTE') {
       if (query.grupo) {
         where.grupo = query.grupo;
       }

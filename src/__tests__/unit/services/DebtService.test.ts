@@ -244,6 +244,30 @@ describe('DebtService — hierarquia: filtros query string não devem sobrepor r
     expect((call.where as any).distrito).toBe('Sul');
   });
 
+  it('GERENTE pode filtrar por grupo via query string', async () => {
+    vi.mocked(debtRepository.findMany).mockResolvedValueOnce({ data: [], total: 0 });
+
+    await debtService.list(
+      { role: 'GERENTE', cpf: '' },
+      { grupo: 'GrupoEspecifico' },
+    );
+
+    const call = vi.mocked(debtRepository.findMany).mock.calls[0][0];
+    expect((call.where as any).grupo).toBe('GrupoEspecifico');
+  });
+
+  it('GERENTE pode filtrar por distrito via query string', async () => {
+    vi.mocked(debtRepository.findMany).mockResolvedValueOnce({ data: [], total: 0 });
+
+    await debtService.list(
+      { role: 'GERENTE', cpf: '' },
+      { distrito: 'Sul' },
+    );
+
+    const call = vi.mocked(debtRepository.findMany).mock.calls[0][0];
+    expect((call.where as any).distrito).toBe('Sul');
+  });
+
   it('CONSULTOR não pode filtrar por grupo via query string', async () => {
     const consultantConsultor = {
       id: 'c3', codigo: 'COD123', tipo: 3, grupo: 'GrupoC', distrito: 'D3',
