@@ -6,6 +6,7 @@ import debtRepository from '../repositories/DebtRepository';
 import eRedeService from './ERedeService';
 import webSocketService from './WebSocketService';
 import savedCardService from './SavedCardService';
+import savedCardRepository from '../repositories/SavedCardRepository';
 import type { CreatePaymentDTO, ERedeCallbackPayload } from '../types';
 import type { Prisma } from '../../generated/prisma/client';
 
@@ -23,7 +24,8 @@ class PaymentService {
    * Cria um pagamento na eRede.
    */
   async create(userId: string, payload: CreatePaymentDTO) {
-    const { debtIds, method, installments, card, billing, saveCard } = payload;
+    const { debtIds, method, installments, billing, saveCard, savedCardId } = payload;
+    let card = payload.card;
 
     // Busca os débitos selecionados
     const debts = await debtRepository.findByIds(debtIds);
@@ -70,6 +72,29 @@ class PaymentService {
       }
     }
 
+    // Resolve cartão salvo se savedCardId fornecido
+    let cardToken: string | undefined;
+    if (method === 'CARTAO_CREDITO' && savedCardId) {
+      const savedCard = await savedCardRepository.findById(savedCardId);
+      if (!savedCard) {
+        throw new AppError('Cartão salvo não encontrado.', StatusCodes.NOT_FOUND);
+      }
+      if (savedCard.userId !== userId) {
+        throw new AppError('Acesso negado ao cartão salvo.', StatusCodes.FORBIDDEN);
+      }
+      if (!card?.cvv) {
+        throw new AppError('CVV é obrigatório ao pagar com cartão salvo.', StatusCodes.BAD_REQUEST);
+      }
+      cardToken = savedCard.token;
+      card = {
+        number: '',
+        expMonth: card?.expMonth || '',
+        expYear: card?.expYear || '',
+        cvv: card.cvv,
+        holderName: savedCard.holderName,
+      };
+    }
+
     // Verifica limite de links ativos
     await this._checkActiveLinksLimit(userId);
 
@@ -86,6 +111,7 @@ class PaymentService {
           installments: installments || 1,
           card: card!,
           billing: billing!,
+          cardToken,
         });
 
     // Cria transação na eRede

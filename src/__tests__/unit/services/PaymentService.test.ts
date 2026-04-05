@@ -39,11 +39,16 @@ vi.mock('../../../repositories/SettingsRepository', () => ({
   default: { get: vi.fn().mockResolvedValue('5') },
 }));
 
+vi.mock('../../../repositories/SavedCardRepository', () => ({
+  default: { findById: vi.fn() },
+}));
+
 import paymentService from '../../../services/PaymentService';
 import paymentRepository from '../../../repositories/PaymentRepository';
 import debtRepository from '../../../repositories/DebtRepository';
 import eRedeService from '../../../services/ERedeService';
 import webSocketService from '../../../services/WebSocketService';
+import savedCardRepository from '../../../repositories/SavedCardRepository';
 
 const makeDebt = (id: string, status = 'PENDENTE', valor = 150) => ({
   id, codigo: 'C001', nome: 'Consultora Test', grupo: 'G1', distrito: 'D1',
@@ -309,6 +314,35 @@ describe('PaymentService.reopenPayment', () => {
   });
 });
 
+describe('PaymentService.reopenPayment — PIX expirado cria nova transação', () => {
+  it('cria nova transação PIX quando link PIX expirou (criado ontem)', async () => {
+    const yesterday = new Date(Date.now() - 86_400_000);
+    vi.mocked(paymentRepository.findById).mockResolvedValueOnce({
+      ...makePayment('p1', 'PENDENTE', 'PIX'),
+      method: 'PIX',
+      createdAt: yesterday,
+      totalValue: 150,
+    } as any);
+    vi.mocked(eRedeService.buildPixPayload).mockReturnValueOnce({ kind: 'pix', reference: 'TPW-new', amount: 15000, expirationDate: '' });
+    vi.mocked(eRedeService.createTransaction).mockResolvedValueOnce({
+      tid: 'tid-new', returnCode: '00', returnMessage: 'OK', reference: 'TPW-new',
+      pix: { qrCode: 'qr-code-new', link: 'https://pix.link/new', expirationDate: '2026-04-02T10:00:00Z' },
+      raw: {},
+    });
+    vi.mocked(paymentRepository.update).mockResolvedValueOnce({
+      ...makePayment('p1', 'PENDENTE', 'PIX'),
+      paymentLink: 'https://pix.link/new',
+      qrCode: 'qr-code-new',
+    } as any);
+
+    const result = await paymentService.reopenPayment('user-uuid-1', 'p1');
+
+    expect(eRedeService.createTransaction).toHaveBeenCalled();
+    expect(paymentRepository.update).toHaveBeenCalled();
+    expect((result as any).reopened).toBe(true);
+  });
+});
+
 describe('PaymentService.create — atomicidade via status na criação (CRIT-03)', () => {
   it('NÃO chama paymentRepository.update durante create (status definido na criação)', async () => {
     vi.mocked(debtRepository.findByIds).mockResolvedValueOnce([makeDebt('d1') as any]);
@@ -451,6 +485,62 @@ describe('PaymentService.listPaidDocuments', () => {
   });
 });
 
+describe('PaymentService.processGatewayCallback — busca por reference quando tid está vazio', () => {
+  it('usa findByReferenceNum quando tid está vazio mas reference tem valor', async () => {
+    vi.mocked(eRedeService.validateCallbackSignature).mockReturnValueOnce(true);
+    vi.mocked(eRedeService.mapStatusToLocal).mockReturnValueOnce('PAGO');
+    vi.mocked(paymentRepository.findByReferenceNum).mockResolvedValueOnce(
+      { ...makePayment('p1', 'PENDENTE'), gatewayStatusCode: '99' } as any,
+    );
+    vi.mocked(paymentRepository.update).mockResolvedValueOnce(makePayment('p1', 'PAGO') as any);
+
+    await paymentService.processGatewayCallback({ tid: '', returnCode: '00', status: 0, reference: 'TPW-ref-1', amount: 1000 });
+
+    expect(paymentRepository.findByReferenceNum).toHaveBeenCalledWith('TPW-ref-1');
+    expect(paymentRepository.findByGatewayTransactionId).not.toHaveBeenCalled();
+  });
+
+  it('lança 404 quando pagamento não é encontrado por reference', async () => {
+    vi.mocked(eRedeService.validateCallbackSignature).mockReturnValueOnce(true);
+    vi.mocked(paymentRepository.findByReferenceNum).mockResolvedValueOnce(null);
+
+    await expect(
+      paymentService.processGatewayCallback({ tid: '', returnCode: '00', status: 0, reference: 'TPW-inexistente', amount: 0 }),
+    ).rejects.toMatchObject({ statusCode: 404 });
+  });
+});
+
+describe('PaymentService._validateInstallments — faixa R$300–R$499 e parcelas inválidas', () => {
+  it('lança 400 quando subtotal está entre R$300 e R$499 com installments > 2', async () => {
+    // subtotal=400, com 5% fee = 420 → total >= 300 e < 500; installments=3 excede limite de 2
+    vi.mocked(debtRepository.findByIds).mockResolvedValueOnce([makeDebt('d1', 'PENDENTE', 400) as any]);
+
+    await expect(
+      paymentService.create('user-uuid-1', {
+        debtIds: ['d1'],
+        method: 'CARTAO_CREDITO',
+        installments: 3,
+        card: cardBase,
+        billing: billingBase,
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('lança 400 quando installments é 0 (número de parcelas inválido)', async () => {
+    vi.mocked(debtRepository.findByIds).mockResolvedValueOnce([makeDebt('d1', 'PENDENTE', 500) as any]);
+
+    await expect(
+      paymentService.create('user-uuid-1', {
+        debtIds: ['d1'],
+        method: 'CARTAO_CREDITO',
+        installments: 0,
+        card: cardBase,
+        billing: billingBase,
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+});
+
 describe('PaymentService.create — parcelamento baseado no subtotal (CRIT-04)', () => {
   // subtotal = 285, totalValue com 5% fee = 299.25 (< 300)
   // subtotal = 285 → max 1 parcela. Passando installments=2 deve falhar.
@@ -509,5 +599,99 @@ describe('PaymentService.create — parcelamento baseado no subtotal (CRIT-04)',
       billing: billingBase,
     });
     expect(result).toBeDefined();
+  });
+});
+
+describe('PaymentService.create — pagamento com savedCardId (RF-29)', () => {
+  const savedCard = {
+    id: 'saved-card-1', userId: 'user-uuid-1', token: 'tok_saved_abc',
+    cardBrand: 'VISA', lastFour: '4242', holderName: 'SAVED USER',
+    createdAt: new Date(), updatedAt: new Date(),
+  };
+
+  beforeEach(() => {
+    vi.mocked(debtRepository.findByIds).mockResolvedValue([makeDebt('d1', 'PENDENTE', 100) as any]);
+    vi.mocked(eRedeService.buildCreditPayload).mockReturnValue({ kind: 'credit' } as any);
+    vi.mocked(eRedeService.mapStatusToLocal).mockReturnValue('PAGO');
+    vi.mocked(paymentRepository.create).mockResolvedValue(makePayment('p1', 'PAGO', 'CARTAO_CREDITO') as any);
+  });
+
+  it('cria pagamento usando token do cartão salvo', async () => {
+    vi.mocked(savedCardRepository.findById).mockResolvedValueOnce(savedCard as any);
+
+    await paymentService.create('user-uuid-1', {
+      debtIds: ['d1'],
+      method: 'CARTAO_CREDITO',
+      installments: 1,
+      savedCardId: 'saved-card-1',
+      card: { number: '', expMonth: '', expYear: '', cvv: '123', holderName: '' },
+      billing: billingBase,
+    });
+
+    expect(eRedeService.buildCreditPayload).toHaveBeenCalledWith(
+      expect.objectContaining({ cardToken: 'tok_saved_abc' }),
+    );
+  });
+
+  it('lança 404 quando savedCardId não existe', async () => {
+    vi.mocked(savedCardRepository.findById).mockResolvedValueOnce(null);
+
+    await expect(paymentService.create('user-uuid-1', {
+      debtIds: ['d1'],
+      method: 'CARTAO_CREDITO',
+      installments: 1,
+      savedCardId: 'card-inexistente',
+      card: { number: '', expMonth: '', expYear: '', cvv: '123', holderName: '' },
+      billing: billingBase,
+    })).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it('lança 403 quando cartão salvo pertence a outro usuário', async () => {
+    vi.mocked(savedCardRepository.findById).mockResolvedValueOnce(
+      { ...savedCard, userId: 'outro-user' } as any,
+    );
+
+    await expect(paymentService.create('user-uuid-1', {
+      debtIds: ['d1'],
+      method: 'CARTAO_CREDITO',
+      installments: 1,
+      savedCardId: 'saved-card-1',
+      card: { number: '', expMonth: '', expYear: '', cvv: '123', holderName: '' },
+      billing: billingBase,
+    })).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  it('lança 400 quando savedCardId presente mas cvv ausente', async () => {
+    vi.mocked(savedCardRepository.findById).mockResolvedValueOnce(savedCard as any);
+
+    await expect(paymentService.create('user-uuid-1', {
+      debtIds: ['d1'],
+      method: 'CARTAO_CREDITO',
+      installments: 1,
+      savedCardId: 'saved-card-1',
+      billing: billingBase,
+    })).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('usa holderName do cartão salvo no payload', async () => {
+    vi.mocked(savedCardRepository.findById).mockResolvedValueOnce(savedCard as any);
+
+    await paymentService.create('user-uuid-1', {
+      debtIds: ['d1'],
+      method: 'CARTAO_CREDITO',
+      installments: 1,
+      savedCardId: 'saved-card-1',
+      card: { number: '', expMonth: '', expYear: '', cvv: '456', holderName: '' },
+      billing: billingBase,
+    });
+
+    expect(eRedeService.buildCreditPayload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        card: expect.objectContaining({
+          cvv: '456',
+          holderName: 'SAVED USER',
+        }),
+      }),
+    );
   });
 });

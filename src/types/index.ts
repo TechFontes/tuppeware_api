@@ -35,6 +35,7 @@ export interface CreatePaymentDTO {
   method: 'PIX' | 'CARTAO_CREDITO';
   installments?: number;
   saveCard?: boolean;
+  savedCardId?: string;
   card?: {
     number: string;
     expMonth: string;
