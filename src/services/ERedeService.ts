@@ -266,14 +266,19 @@ class ERedeService {
       postalcode: string;
       country?: string;
     };
+    cardToken?: string;
   }): ERedeTransactionRequest {
+    const cardField = params.cardToken
+      ? { cardToken: params.cardToken }
+      : { cardNumber: params.card.number };
+
     return {
       kind: 'credit',
       reference: params.reference,
       amount: params.amountCents,
       installments: params.installments,
       cardHolderName: params.card.holderName,
-      cardNumber: params.card.number,
+      ...cardField,
       expirationMonth: params.card.expMonth,
       expirationYear: params.card.expYear,
       securityCode: params.card.cvv,

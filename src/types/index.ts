@@ -117,7 +117,8 @@ export interface ERedeCreditRequest {
   amount: number; // centavos
   installments: number;
   cardHolderName: string;
-  cardNumber: string;
+  cardNumber?: string;
+  cardToken?: string;
   expirationMonth: string;
   expirationYear: string;
   securityCode: string;

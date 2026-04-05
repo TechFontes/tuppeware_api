@@ -237,6 +237,108 @@ describe('ERedeService.buildCreditPayload — campos adicionais', () => {
   });
 });
 
+describe('ERedeService.queryTransaction — timeout e erro genérico', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('lança AppError 504 quando queryTransaction atinge timeout (AbortError)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
+      const err = new Error('The operation was aborted');
+      err.name = 'AbortError';
+      return Promise.reject(err);
+    }));
+    const svc = await getService();
+
+    await expect(svc.queryTransaction('tid-timeout'))
+      .rejects.toMatchObject({ statusCode: 504 });
+  });
+
+  it('lança AppError 503 quando queryTransaction lança erro genérico de rede', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
+    const svc = await getService();
+
+    await expect(svc.queryTransaction('tid-err'))
+      .rejects.toMatchObject({ statusCode: 503 });
+  });
+});
+
+describe('ERedeService.createTransaction — erro genérico de rede', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('lança AppError 503 quando createTransaction lança erro genérico (não AbortError)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
+    const svc = await getService();
+
+    await expect(svc.createTransaction(svc.buildPixPayload('TPW-1', 1000)))
+      .rejects.toMatchObject({ statusCode: 503 });
+  });
+});
+
+describe('ERedeService.tokenizeCard — erro genérico de rede', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('lança AppError 503 quando tokenizeCard lança erro genérico (não AbortError)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ETIMEDOUT')));
+    const svc = await getService();
+
+    await expect(svc.tokenizeCard({
+      number: '4242424242424242', expMonth: '12', expYear: '2028', holderName: 'Test',
+    })).rejects.toMatchObject({ statusCode: 503 });
+  });
+});
+
+describe('ERedeService.validateCallbackSignature — com secret configurado', () => {
+  afterEach(() => {
+    delete process.env.EREDE_CALLBACK_SECRET;
+    vi.unstubAllGlobals();
+  });
+
+  it('retorna true quando EREDE_CALLBACK_SECRET está configurado e payload é válido', async () => {
+    process.env.EREDE_CALLBACK_SECRET = 'my-secret';
+    const svc = await getService();
+
+    const result = svc.validateCallbackSignature({
+      tid: 'tid-123',
+      returnCode: '00',
+      status: 0,
+      reference: 'TPW-1',
+      amount: 1000,
+    });
+
+    expect(result).toBe(true);
+  });
+});
+
+describe('ERedeService.buildCreditPayload — com cardToken', () => {
+  it('usa cardToken em vez de cardNumber quando token fornecido', async () => {
+    const svc = await getService();
+    const payload = svc.buildCreditPayload({
+      reference: 'TPW-ref-tok',
+      amountCents: 15000,
+      installments: 1,
+      card: { number: '', expMonth: '12', expYear: '2028', cvv: '123', holderName: 'TEST' },
+      billing: { name: 'T', document: '111', email: 't@t.com', address: 'R', district: 'D', city: 'C', state: 'SP', postalcode: '00000' },
+      cardToken: 'tok_abc123',
+    }) as any;
+
+    expect(payload.cardToken).toBe('tok_abc123');
+    expect(payload.cardNumber).toBeUndefined();
+  });
+
+  it('mantém cardNumber quando cardToken não fornecido', async () => {
+    const svc = await getService();
+    const payload = svc.buildCreditPayload({
+      reference: 'TPW-ref-num',
+      amountCents: 15000,
+      installments: 1,
+      card: { number: '4111111111111111', expMonth: '12', expYear: '2028', cvv: '123', holderName: 'TEST' },
+      billing: { name: 'T', document: '111', email: 't@t.com', address: 'R', district: 'D', city: 'C', state: 'SP', postalcode: '00000' },
+    }) as any;
+
+    expect(payload.cardNumber).toBe('4111111111111111');
+    expect(payload.cardToken).toBeUndefined();
+  });
+});
+
 describe('ERedeService.createTransaction', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 
