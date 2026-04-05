@@ -1,10 +1,12 @@
+import jwt from 'jsonwebtoken';
 import { Server as SocketIOServer, Socket } from 'socket.io';
+import { jwtSecret } from '../config/auth';
 
 /**
  * Serviço de WebSocket para comunicação em tempo real.
  * Utiliza Socket.IO para emitir eventos de atualização de status.
  */
-class WebSocketService {
+export class WebSocketService {
   private io: SocketIOServer | null;
   private connectedUsers: Map<string, string>;
 
@@ -22,12 +24,18 @@ class WebSocketService {
     io.on('connection', (socket: Socket) => {
       console.info(`WebSocket: cliente conectado - ${socket.id}`);
 
-      // Registra o usuário na sala baseada no seu ID
-      socket.on('register', (userId: string) => {
-        if (userId) {
-          socket.join(`user:${userId}`);
-          this.connectedUsers.set(socket.id, userId);
-          console.info(`WebSocket: usuário ${userId} registrado`);
+      // Registra o usuário na sala baseada no JWT — valida o token antes de entrar
+      socket.on('register', (token: string) => {
+        if (!token) return;
+
+        try {
+          const decoded = jwt.verify(token, jwtSecret) as { id: string };
+          socket.join(`user:${decoded.id}`);
+          this.connectedUsers.set(socket.id, decoded.id);
+          console.info(`WebSocket: usuário ${decoded.id} registrado`);
+        } catch {
+          console.warn(`WebSocket: token inválido - ${socket.id}`);
+          socket.emit('auth_error', { message: 'Token inválido.' });
         }
       });
 
