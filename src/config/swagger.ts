@@ -6,7 +6,7 @@ const options: swaggerJsdoc.Options = {
     info: {
       title: 'Portal de Gestão de Débitos e Pagamentos - API',
       version: '1.0.0',
-      description: 'API para gestão de débitos e pagamentos de consultores. Suporta autenticação JWT, importação de dados via CSV, pagamentos via MaxiPago e notificações em tempo real via WebSocket.',
+      description: 'API para gestão de débitos e pagamentos de consultores. Suporta autenticação JWT, importação de dados via CSV, pagamentos via eRede e notificações em tempo real via WebSocket.',
       contact: {
         name: 'TechFontes',
       },
@@ -92,6 +92,15 @@ const options: swaggerJsdoc.Options = {
                 holderName: { type: 'string', example: 'Maria Silva' },
               },
             },
+            saveCard: {
+              type: 'boolean',
+              description: 'Salvar cartão para uso futuro (apenas cartão de crédito)',
+            },
+            savedCardId: {
+              type: 'string',
+              format: 'uuid',
+              description: 'ID de um cartão salvo previamente. Quando presente, apenas card.cvv é obrigatório.',
+            },
             billing: {
               type: 'object',
               required: ['name', 'email', 'phone', 'document', 'birthDate', 'address', 'district', 'city', 'state', 'postalcode'],
@@ -119,7 +128,7 @@ const options: swaggerJsdoc.Options = {
             name: { type: 'string' },
             cpf: { type: 'string' },
             email: { type: 'string', format: 'email' },
-            role: { type: 'string', enum: ['ADMIN', 'EMPRESARIA', 'LIDER', 'CONSULTOR'] },
+            role: { type: 'string', enum: ['ADMIN', 'GERENTE', 'EMPRESARIA', 'LIDER', 'CONSULTOR'] },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' },
           },
@@ -153,7 +162,7 @@ const options: swaggerJsdoc.Options = {
             fee: { type: 'number', format: 'decimal' },
             totalValue: { type: 'number', format: 'decimal' },
             status: { type: 'string', enum: ['PENDENTE', 'PAGO', 'CANCELADO'] },
-            gatewayProvider: { type: 'string', enum: ['MAXIPAGO', 'ASAAS'] },
+            gatewayProvider: { type: 'string', enum: ['EREDE'] },
             referenceNum: { type: 'string', nullable: true },
             gatewayTransactionId: { type: 'string', nullable: true },
             gatewayOrderId: { type: 'string', nullable: true },
@@ -161,6 +170,7 @@ const options: swaggerJsdoc.Options = {
             gatewayStatusMessage: { type: 'string', nullable: true },
             processorReference: { type: 'string', nullable: true },
             paymentLink: { type: 'string', nullable: true },
+            qrCode: { type: 'string', nullable: true, description: 'String EMV do QR Code PIX (copiar-colar)' },
             callbackPayload: { type: 'object', nullable: true },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' },
