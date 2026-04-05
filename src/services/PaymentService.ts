@@ -269,6 +269,11 @@ class PaymentService {
       await debtRepository.updateMany({ id: { in: debtIds } }, { status: 'PAGO' });
     }
 
+    if (localStatus === 'CANCELADO') {
+      const debtIds = updated.paymentDebts.map((pd: { debtId: string }) => pd.debtId);
+      await debtRepository.updateMany({ id: { in: debtIds } }, { status: 'PENDENTE' });
+    }
+
     webSocketService.emitToUser(updated.userId, 'payment:updated', {
       paymentId: updated.id,
       status: updated.status,
@@ -379,6 +384,11 @@ class PaymentService {
     if (status === 'PAGO') {
       const debtIds = payment.paymentDebts.map((pd: { debtId: string }) => pd.debtId);
       await debtRepository.updateMany({ id: { in: debtIds } }, { status: 'PAGO' });
+    }
+
+    if (status === 'CANCELADO') {
+      const debtIds = payment.paymentDebts.map((pd: { debtId: string }) => pd.debtId);
+      await debtRepository.updateMany({ id: { in: debtIds } }, { status: 'PENDENTE' });
     }
 
     webSocketService.emitToUser(payment.userId, 'payment:updated', {

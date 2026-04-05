@@ -259,6 +259,19 @@ describe('PaymentService.processGatewayCallback', () => {
     expect(debtRepository.updateMany).toHaveBeenCalledWith({ id: { in: ['d1', 'd2'] } }, { status: 'PAGO' });
   });
 
+  it('reverte débitos para PENDENTE quando status do callback é CANCELADO', async () => {
+    vi.mocked(eRedeService.validateCallbackSignature).mockReturnValueOnce(true);
+    vi.mocked(eRedeService.mapStatusToLocal).mockReturnValueOnce('CANCELADO');
+    vi.mocked(paymentRepository.findByGatewayTransactionId).mockResolvedValueOnce(
+      { ...makePayment('p1', 'PENDENTE'), gatewayStatusCode: '99' } as any,
+    );
+    vi.mocked(paymentRepository.update).mockResolvedValueOnce(
+      { ...makePayment('p1', 'CANCELADO'), paymentDebts: [{ debtId: 'd1' }, { debtId: 'd2' }] } as any,
+    );
+    await paymentService.processGatewayCallback({ tid: 'tid-abc', returnCode: '04', status: 4, reference: 'TPW-1', amount: 1000 });
+    expect(debtRepository.updateMany).toHaveBeenCalledWith({ id: { in: ['d1', 'd2'] } }, { status: 'PENDENTE' });
+  });
+
   it('emite payment:updated via WebSocket após atualização', async () => {
     vi.mocked(eRedeService.validateCallbackSignature).mockReturnValueOnce(true);
     vi.mocked(eRedeService.mapStatusToLocal).mockReturnValueOnce('CANCELADO');
@@ -443,15 +456,18 @@ describe('PaymentService.updateStatus', () => {
     expect(webSocketService.emitToUser).toHaveBeenCalledWith('user-1', 'payment:updated', expect.any(Object));
   });
 
-  it('não atualiza débitos quando status é CANCELADO', async () => {
+  it('reverte débitos para PENDENTE quando status é CANCELADO', async () => {
     vi.mocked(paymentRepository.update).mockResolvedValueOnce({
       id: 'pay-1', userId: 'user-1', status: 'CANCELADO',
-      paymentDebts: [{ debtId: 'debt-1' }],
+      paymentDebts: [{ debtId: 'debt-1' }, { debtId: 'debt-2' }],
     } as any);
 
     await paymentService.updateStatus('pay-1', 'CANCELADO');
 
-    expect(debtRepository.updateMany).not.toHaveBeenCalled();
+    expect(debtRepository.updateMany).toHaveBeenCalledWith(
+      { id: { in: ['debt-1', 'debt-2'] } },
+      { status: 'PENDENTE' },
+    );
     expect(webSocketService.emitToUser).toHaveBeenCalledWith('user-1', 'payment:updated', expect.any(Object));
   });
 });
