@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
+import bcrypt from 'bcryptjs';
 import csvImportService from '../services/CsvImportService';
 import userService from '../services/UserService';
 import debtService from '../services/DebtService';
@@ -109,7 +110,23 @@ class AdminController {
    */
   async updateUser(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const user = await userService.update(String(req.params.id), req.body as Prisma.UserUpdateInput);
+      const allowedFields = ['name', 'email', 'role', 'isActive', 'phone', 'birthDate',
+        'address', 'addressNumber', 'addressComplement', 'neighbourhood', 'city', 'state', 'postalCode'];
+      const body = req.body as Record<string, unknown>;
+      const updateData: Record<string, unknown> = {};
+
+      for (const field of allowedFields) {
+        if (body[field] !== undefined) {
+          updateData[field] = body[field];
+        }
+      }
+
+      // Se newPassword fornecido, hasheia antes de salvar
+      if (body.newPassword && typeof body.newPassword === 'string') {
+        updateData.password = await bcrypt.hash(body.newPassword, 10);
+      }
+
+      const user = await userService.update(String(req.params.id), updateData as Prisma.UserUpdateInput);
 
       res.status(StatusCodes.OK).json({ status: 'success', data: user });
     } catch (error) {
