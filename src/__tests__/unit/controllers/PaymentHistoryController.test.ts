@@ -32,9 +32,9 @@ beforeEach(() => vi.clearAllMocks());
 describe('PaymentHistoryController.index', () => {
   it('retorna 200 com histórico paginado', async () => {
     const mockResult = {
-      data: [{ id: 'p1' }],
+      data: [{ id: 'p1', paymentDebts: [] }],
       pagination: { total: 1, page: 1, limit: 10, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
-    };
+    } as any;
     vi.mocked(paymentService.getHistory).mockResolvedValueOnce(mockResult);
 
     const req = makeReq('user-1', {}, { page: '1', limit: '10' });

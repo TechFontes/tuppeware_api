@@ -11,6 +11,8 @@ import {
 } from '../config/erede';
 import type {
   ERedeTransactionRequest,
+  ERedePixRequest,
+  ERedeCreditRequest,
   ERedeTransactionResponse,
   ERedeCallbackPayload,
   ERedeQueryResponse,
@@ -229,7 +231,7 @@ class ERedeService {
   /**
    * Monta o payload de criação para PIX.
    */
-  buildPixPayload(reference: string, amountCents: number): ERedeTransactionRequest {
+  buildPixPayload(reference: string, amountCents: number): ERedePixRequest {
     const expiration = new Date(Date.now() + eredePixExpirationHours * 60 * 60 * 1000);
 
     return {
@@ -267,7 +269,7 @@ class ERedeService {
       country?: string;
     };
     cardToken?: string;
-  }): ERedeTransactionRequest {
+  }): ERedeCreditRequest {
     const cardField = params.cardToken
       ? { cardToken: params.cardToken }
       : { cardNumber: params.card.number };
