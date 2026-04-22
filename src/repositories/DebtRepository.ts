@@ -78,6 +78,19 @@ class DebtRepository {
       where: { id: { in: ids } },
     });
   }
+
+  async updateDebtPaidAmount(
+    debtId: string,
+    expectedCurrentPaidAmount: Prisma.Decimal | string,
+    newPaidAmount: Prisma.Decimal | string,
+    newStatus: 'PENDENTE' | 'ATRASADO' | 'PAGO',
+  ): Promise<boolean> {
+    const result = await prisma.debt.updateMany({
+      where: { id: debtId, paidAmount: expectedCurrentPaidAmount as any },
+      data: { paidAmount: newPaidAmount as any, status: newStatus },
+    });
+    return result.count === 1;
+  }
 }
 
 export default new DebtRepository();
