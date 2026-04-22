@@ -14,8 +14,10 @@ vi.mock('../../../repositories/PaymentRepository', () => ({
 }));
 
 vi.mock('../../../repositories/DebtRepository', () => ({
-  default: { findByIds: vi.fn(), findById: vi.fn(), updateMany: vi.fn() },
+  default: { findByIds: vi.fn(), findById: vi.fn(), updateMany: vi.fn(), updateDebtPaidAmount: vi.fn() },
 }));
+
+vi.mock('../../../services/WebhookDispatcher', () => ({ default: { send: vi.fn() } }));
 
 vi.mock('../../../services/ERedeService', () => ({
   default: {
@@ -60,6 +62,7 @@ import savedCardRepository from '../../../repositories/SavedCardRepository';
 import settingsRepository from '../../../repositories/SettingsRepository';
 import userRepository from '../../../repositories/UserRepository';
 import debtService from '../../../services/DebtService';
+import webhookDispatcher from '../../../services/WebhookDispatcher';
 
 const makeDebt = (id: string, status = 'PENDENTE', valor = 150) => ({
   id, codigo: 'C001', nome: 'Consultora Test', grupo: 'G1', distrito: 'D1',
@@ -822,5 +825,165 @@ describe('createPartial', () => {
     await expect(
       paymentService.createPartial('u-1', { debtId: 'd-of-other', amount: 40 }, { id: 'u-1', role: 'CONSULTOR', cpf: '111' }),
     ).rejects.toMatchObject({ statusCode: 404 });
+  });
+});
+
+describe('processGatewayCallback — parcial + webhook', () => {
+  beforeEach(async () => {
+    // Drena setImmediate pendentes de testes anteriores antes de limpar mocks
+    await new Promise((r) => setImmediate(r));
+    vi.clearAllMocks();
+    vi.mocked(webhookDispatcher.send).mockResolvedValue(undefined);
+    vi.mocked(userRepository.findById).mockResolvedValue({ id: 'u-1', cpf: '12345678900' } as any);
+    vi.mocked(eRedeService.validateCallbackSignature).mockReturnValue(true);
+  });
+
+  const mkPartialPayment = (overrides: Partial<any> = {}) => ({
+    id: 'p-1',
+    referenceNum: 'TPW-R1',
+    totalValue: 40,
+    isPartial: true,
+    status: 'PENDENTE',
+    userId: 'u-1',
+    method: 'PIX',
+    gatewayStatusCode: '99',
+    gatewayTransactionId: null,
+    paymentDebts: [
+      {
+        debtId: 'd-1',
+        debt: { id: 'd-1', codigo: '1234', valor: 100, paidAmount: 0, status: 'PENDENTE' },
+      },
+    ],
+    ...overrides,
+  });
+
+  const mkFullPayment = () => ({
+    id: 'p-full',
+    referenceNum: 'TPW-RF',
+    totalValue: 100,
+    isPartial: false,
+    status: 'PENDENTE',
+    userId: 'u-1',
+    method: 'PIX',
+    gatewayStatusCode: '99',
+    gatewayTransactionId: null,
+    paymentDebts: [
+      { debtId: 'd-1', debt: { id: 'd-1', codigo: '1234', valor: 100, paidAmount: 0, status: 'PENDENTE' } },
+    ],
+  });
+
+  it('callback de parcial confirmado: soma paidAmount, mantém PENDENTE, dispara webhook PARTIAL', async () => {
+    const payment = mkPartialPayment();
+    vi.mocked(eRedeService.mapStatusToLocal).mockReturnValue('PAGO');
+    vi.mocked(paymentRepository.findByReferenceNum).mockResolvedValue(payment as any);
+    vi.mocked(paymentRepository.update).mockResolvedValue({ ...payment, status: 'PAGO' } as any);
+    vi.mocked(debtRepository.updateDebtPaidAmount).mockResolvedValue(true);
+
+    await paymentService.processGatewayCallback({
+      reference: 'TPW-R1',
+      returnCode: '00',
+      tid: '',
+      status: 0,
+      amount: 4000,
+    } as any);
+
+    // paidAmount 0 -> 40, não quita (40 < 100), mantém PENDENTE
+    expect(debtRepository.updateDebtPaidAmount).toHaveBeenCalledWith(
+      'd-1',
+      expect.anything(),
+      expect.anything(),
+      'PENDENTE',
+    );
+
+    // Webhook async — aguarda setImmediate
+    await new Promise((r) => setImmediate(r));
+    expect(webhookDispatcher.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paymentType: 'PARTIAL',
+        debt: expect.objectContaining({ paidAmount: 40, remaining: 60 }),
+      }),
+    );
+  });
+
+  it('callback do último parcial: quita (status PAGO) e dispara webhook', async () => {
+    const payment = mkPartialPayment({
+      id: 'p-2',
+      referenceNum: 'TPW-R2',
+      totalValue: 60,
+      paymentDebts: [
+        { debtId: 'd-1', debt: { id: 'd-1', codigo: '1234', valor: 100, paidAmount: 40, status: 'PENDENTE' } },
+      ],
+    });
+    vi.mocked(eRedeService.mapStatusToLocal).mockReturnValue('PAGO');
+    vi.mocked(paymentRepository.findByReferenceNum).mockResolvedValue(payment as any);
+    vi.mocked(paymentRepository.update).mockResolvedValue({ ...payment, status: 'PAGO' } as any);
+    vi.mocked(debtRepository.updateDebtPaidAmount).mockResolvedValue(true);
+
+    await paymentService.processGatewayCallback({
+      reference: 'TPW-R2',
+      returnCode: '00',
+      tid: '',
+      status: 0,
+      amount: 6000,
+    } as any);
+
+    expect(debtRepository.updateDebtPaidAmount).toHaveBeenCalledWith(
+      'd-1',
+      expect.anything(),
+      expect.anything(),
+      'PAGO',
+    );
+  });
+
+  it('callback de pagamento TOTAL: preserva fluxo atual, dispara webhook FULL', async () => {
+    const payment = mkFullPayment();
+    vi.mocked(eRedeService.mapStatusToLocal).mockReturnValue('PAGO');
+    vi.mocked(paymentRepository.findByReferenceNum).mockResolvedValue(payment as any);
+    vi.mocked(paymentRepository.update).mockResolvedValue({
+      ...payment,
+      status: 'PAGO',
+      paymentDebts: [{ debtId: 'd-1' }],
+    } as any);
+    vi.mocked(debtRepository.updateMany).mockResolvedValue({ count: 1 } as any);
+
+    await paymentService.processGatewayCallback({
+      reference: 'TPW-RF',
+      returnCode: '00',
+      tid: '',
+      status: 0,
+      amount: 10000,
+    } as any);
+
+    // NÃO deve chamar updateDebtPaidAmount em total (fluxo atual usa updateMany para marcar PAGO)
+    expect(debtRepository.updateDebtPaidAmount).not.toHaveBeenCalled();
+
+    await new Promise((r) => setImmediate(r));
+    expect(webhookDispatcher.send).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentType: 'FULL' }),
+    );
+  });
+
+  it('callback CANCELADO em parcial: NÃO mexe paidAmount e NÃO dispara webhook', async () => {
+    const payment = mkPartialPayment({ id: 'p-cx', referenceNum: 'TPW-CX' });
+    vi.mocked(eRedeService.mapStatusToLocal).mockReturnValue('CANCELADO');
+    vi.mocked(paymentRepository.findByReferenceNum).mockResolvedValue(payment as any);
+    vi.mocked(paymentRepository.update).mockResolvedValue({
+      ...payment,
+      status: 'CANCELADO',
+      paymentDebts: [{ debtId: 'd-1' }],
+    } as any);
+    vi.mocked(debtRepository.updateMany).mockResolvedValue({ count: 1 } as any);
+
+    await paymentService.processGatewayCallback({
+      reference: 'TPW-CX',
+      returnCode: '99',
+      status: 4,
+      tid: '',
+      amount: 0,
+    } as any);
+
+    expect(debtRepository.updateDebtPaidAmount).not.toHaveBeenCalled();
+    await new Promise((r) => setImmediate(r));
+    expect(webhookDispatcher.send).not.toHaveBeenCalled();
   });
 });

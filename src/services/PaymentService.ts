@@ -10,6 +10,7 @@ import savedCardRepository from '../repositories/SavedCardRepository';
 import settingsRepository from '../repositories/SettingsRepository';
 import userRepository from '../repositories/UserRepository';
 import debtService from './DebtService';
+import webhookDispatcher, { type PaymentConfirmedEvent } from './WebhookDispatcher';
 import type { CreatePaymentDTO, ERedeCallbackPayload } from '../types';
 import type { Prisma } from '../../generated/prisma/client';
 
@@ -322,8 +323,117 @@ class PaymentService {
     });
 
     if (localStatus === 'PAGO') {
-      const debtIds = updated.paymentDebts.map((pd: { debtId: string }) => pd.debtId);
-      await debtRepository.updateMany({ id: { in: debtIds } }, { status: 'PAGO' });
+      if (payment.isPartial && payment.paymentDebts.length > 0) {
+        // Pagamento parcial: acumula paidAmount com optimistic lock
+        const linkedDebt = (payment.paymentDebts[0] as unknown as { debtId: string; debt: { id: string; codigo: string; valor: number | string; paidAmount: number | string; status: string } }).debt;
+        const valorNum = parseFloat(linkedDebt.valor.toString());
+        const incremento = parseFloat(payment.totalValue.toString());
+
+        let currentPaid = parseFloat(linkedDebt.paidAmount.toString());
+        let currentStatus = linkedDebt.status;
+        let updated2 = false;
+
+        for (let attempt = 0; attempt < 3 && !updated2; attempt++) {
+          const novoPaid = currentPaid + incremento;
+          const quitou = novoPaid >= valorNum;
+          const novoStatus = quitou ? 'PAGO' : currentStatus;
+
+          updated2 = await debtRepository.updateDebtPaidAmount(
+            linkedDebt.id,
+            currentPaid.toFixed(2),
+            novoPaid.toFixed(2),
+            novoStatus as 'PENDENTE' | 'ATRASADO' | 'PAGO',
+          );
+
+          if (!updated2) {
+            const fresh = await debtRepository.findById(linkedDebt.id);
+            if (!fresh) break;
+            currentPaid = parseFloat((fresh.paidAmount as unknown as string).toString());
+            currentStatus = fresh.status;
+          } else {
+            const paidAmountFinal = currentPaid + incremento;
+            const remaining = Math.max(0, valorNum - paidAmountFinal);
+            const statusFinal = (paidAmountFinal >= valorNum ? 'PAGO' : currentStatus) as 'PENDENTE' | 'ATRASADO' | 'PAGO';
+
+            // Dispara webhook async após commit
+            const user = await userRepository.findById(payment.userId);
+            const event: PaymentConfirmedEvent = {
+              eventId: payment.id,
+              eventType: 'payment.confirmed',
+              paymentType: 'PARTIAL',
+              timestamp: new Date().toISOString(),
+              payment: {
+                id: payment.id,
+                referenceNum: payment.referenceNum!,
+                method: payment.method,
+                amount: parseFloat(payment.totalValue.toString()),
+                paidAt: new Date().toISOString(),
+              },
+              debt: {
+                id: linkedDebt.id,
+                codigo: linkedDebt.codigo,
+                valor: valorNum,
+                paidAmount: paidAmountFinal,
+                remaining,
+                status: statusFinal,
+              },
+              user: { id: user!.id, cpf: user!.cpf },
+            };
+
+            setImmediate(() => {
+              webhookDispatcher.send(event).catch((err) =>
+                console.error('[PaymentService] webhook send failed', err),
+              );
+            });
+          }
+        }
+
+        if (!updated2) {
+          throw new AppError('Conflito ao atualizar paidAmount após 3 tentativas', StatusCodes.CONFLICT);
+        }
+      } else {
+        // Pagamento total: fluxo original
+        const debtIds = updated.paymentDebts.map((pd: { debtId: string }) => pd.debtId);
+        await debtRepository.updateMany({ id: { in: debtIds } }, { status: 'PAGO' });
+
+        // Dispara webhook async para pagamento total
+        if (payment.paymentDebts.length > 0) {
+          const primaryDebtEntry = payment.paymentDebts[0] as unknown as { debtId: string; debt?: { id: string; codigo: string; valor: number | string; paidAmount: number | string; status: string } };
+          const primaryDebt = primaryDebtEntry.debt;
+          if (primaryDebt) {
+            const user = await userRepository.findById(payment.userId);
+            const valor = parseFloat(primaryDebt.valor.toString());
+            const event: PaymentConfirmedEvent = {
+              eventId: payment.id,
+              eventType: 'payment.confirmed',
+              paymentType: 'FULL',
+              timestamp: new Date().toISOString(),
+              payment: {
+                id: payment.id,
+                referenceNum: payment.referenceNum!,
+                method: payment.method,
+                amount: parseFloat(payment.totalValue.toString()),
+                paidAt: new Date().toISOString(),
+              },
+              debt: {
+                id: primaryDebt.id,
+                codigo: primaryDebt.codigo,
+                valor,
+                paidAmount: valor,
+                remaining: 0,
+                status: 'PAGO',
+              },
+              user: { id: user!.id, cpf: user!.cpf },
+            };
+
+            setImmediate(() => {
+              webhookDispatcher.send(event).catch((err) =>
+                console.error('[PaymentService] webhook send failed', err),
+              );
+            });
+          }
+        }
+      }
     }
 
     if (localStatus === 'CANCELADO') {
