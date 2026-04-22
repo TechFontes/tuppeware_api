@@ -147,6 +147,8 @@ const options: swaggerJsdoc.Options = {
             dataVencimento: { type: 'string', format: 'date-time' },
             numeroNf: { type: 'string' },
             status: { type: 'string', enum: ['PENDENTE', 'ATRASADO', 'PAGO'] },
+            paidAmount: { type: 'number', format: 'decimal', description: 'Valor já pago via pagamentos parciais (acumulado)' },
+            remaining: { type: 'number', format: 'decimal', description: 'Valor restante a pagar (valor - paidAmount)' },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' },
           },
@@ -171,9 +173,36 @@ const options: swaggerJsdoc.Options = {
             processorReference: { type: 'string', nullable: true },
             paymentLink: { type: 'string', nullable: true },
             qrCode: { type: 'string', nullable: true, description: 'String EMV do QR Code PIX (copiar-colar)' },
+            isPartial: { type: 'boolean', description: 'Indica se este pagamento é um pagamento parcial de uma dívida' },
             callbackPayload: { type: 'object', nullable: true },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        CreatePartialPaymentDTO: {
+          type: 'object',
+          required: ['debtId', 'amount'],
+          properties: {
+            debtId: {
+              type: 'string',
+              format: 'uuid',
+              description: 'ID da dívida a ser paga parcialmente',
+              example: '550e8400-e29b-41d4-a716-446655440000',
+            },
+            amount: {
+              type: 'number',
+              format: 'decimal',
+              description: 'Valor a ser pago nesta parcela (em reais)',
+              example: 40.00,
+            },
+          },
+        },
+        PartialPaymentResponse: {
+          type: 'object',
+          properties: {
+            paymentId: { type: 'string', format: 'uuid', description: 'ID do pagamento criado' },
+            referenceNum: { type: 'string', description: 'Referência única no formato TPW-{timestamp}-{userId[0:8]}' },
+            qrCode: { type: 'string', nullable: true, description: 'String EMV do QR Code PIX para pagamento parcial' },
           },
         },
         ImportResult: {

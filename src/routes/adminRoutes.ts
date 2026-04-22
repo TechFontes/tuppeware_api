@@ -424,6 +424,16 @@ router.get(
  *   put:
  *     tags: [Admin]
  *     summary: Atualizar configurações (GERENTE only)
+ *     description: |
+ *       Atualiza uma ou mais configurações do sistema. Todas as chaves são armazenadas como strings.
+ *
+ *       **Chaves aceitas:**
+ *       - `max_active_payment_links` — número máximo de links de pagamento ativos por usuário (inteiro > 0)
+ *       - `partial_payment_enabled` — habilita pagamentos parciais via PIX (`"true"` | `"false"`)
+ *       - `partial_payment_min_amount` — valor mínimo por pagamento parcial (decimal > 0, ex: `"10.00"`)
+ *       - `partial_payment_min_remaining` — valor mínimo que pode restar após um parcial (decimal >= 0, ex: `"20.00"`)
+ *       - `payment_webhook_url` — URL HTTPS para receber webhooks de pagamento confirmado (ou string vazia para desabilitar)
+ *       - `payment_webhook_secret` — secret HMAC-SHA256 para assinar webhooks (string >= 16 caracteres)
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -432,11 +442,35 @@ router.get(
  *         application/json:
  *           schema:
  *             type: object
- *             example:
- *               max_active_payment_links: "5"
+ *             additionalProperties:
+ *               type: string
+ *           examples:
+ *             pagamento_parcial:
+ *               summary: Habilitar pagamento parcial
+ *               value:
+ *                 partial_payment_enabled: "true"
+ *                 partial_payment_min_amount: "10.00"
+ *                 partial_payment_min_remaining: "20.00"
+ *             webhook:
+ *               summary: Configurar webhook
+ *               value:
+ *                 payment_webhook_url: "https://meu-sistema.com/webhooks/pagamento"
+ *                 payment_webhook_secret: "minha-chave-secreta-32chars"
+ *             basico:
+ *               summary: Limite de links ativos
+ *               value:
+ *                 max_active_payment_links: "5"
  *     responses:
  *       200:
  *         description: Configurações atualizadas
+ *       400:
+ *         description: Chave desconhecida ou valor inválido
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Acesso negado (requer role GERENTE)
  */
 router.put(
   '/settings',

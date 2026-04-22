@@ -109,3 +109,33 @@ Rastreabilidade: cada critério referencia o(s) requisito(s) que valida.
 | AC-48 | Após callback atualizar status, evento `payment:updated` é emitido na sala `userId` | RF-27 |
 | AC-58 | WebSocket `register` exige JWT válido; token inválido recebe `auth_error` | RF-26, RF-27 |
 | AC-59 | WebSocket `register` sem token não entra em nenhuma sala | RF-26, RF-27 |
+
+---
+
+## RF-30 — Pagamento Parcial
+
+| # | Critério |
+|---|---|
+| RF-30.1 | `POST /api/payments/partial` com feature desabilitada retorna 403 |
+| RF-30.2 | `POST /api/payments/partial` com `amount < min_amount` retorna 400 |
+| RF-30.3 | `POST /api/payments/partial` com `amount > remaining` retorna 400 |
+| RF-30.4 | Parcial que deixaria `remaining_after` maior que 0 e menor que `min_remaining` retorna 400 |
+| RF-30.5 | Parcial com `remaining_after == 0` é aceito (quita exato) |
+| RF-30.6 | Após callback confirmando o parcial, `Debt.paidAmount` acumula o valor pago |
+| RF-30.7 | Quando `paidAmount >= valor`, `Debt.status` vira `PAGO` |
+| RF-30.8 | Dois callbacks concorrentes no mesmo débito não duplicam `paidAmount` (optimistic lock) |
+| RF-30.9 | Callback com status cancelado (status=4) NÃO mexe em `paidAmount` |
+| RF-30.10 | CONSULTOR não consegue fazer parcial em dívida de outro consultor (retorna 404) |
+
+## RF-31 — Webhook
+
+| # | Critério |
+|---|---|
+| RF-31.1 | Webhook é enviado para `payment_webhook_url` após callback confirmar pagamento (parcial ou total) |
+| RF-31.2 | Header `X-Tuppeware-Signature: sha256=<hmac>` computado sobre `{timestamp}.{body}` |
+| RF-31.3 | `paymentType` no payload é `PARTIAL` para pagamentos parciais e `FULL` para totais |
+| RF-31.4 | Falha HTTP 5xx dispara até 3 tentativas com backoff 0s/2s/8s |
+| RF-31.5 | `payment_webhook_url` vazio faz o dispatcher virar no-op (não envia) |
+| RF-31.6 | `payment_webhook_url` configurada sem secret aborta o envio com log warn |
+| RF-31.7 | Webhook é disparado async (setImmediate) e não bloqueia o callback do gateway |
+| RF-31.8 | Falha após 3 tentativas é logada mas não lança exceção |

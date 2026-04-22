@@ -147,6 +147,16 @@ Aplicado nas rotas de criação de pagamento: **5 req / 5 min** por IP. Configur
 
 ---
 
+### Pagamento Parcial
+
+Permite pagar uma dívida única em múltiplas parcelas via PIX. O serviço `PaymentService.createPartial` valida feature flag, hierarquia, valor mínimo e valor mínimo sobrando antes de criar um `Payment` com `isPartial = true`. Na confirmação do callback, `Debt.paidAmount` é incrementado via lock otimista (`updateMany WHERE id AND paidAmount = atual`); se houver conflito, relê e retenta até 3x. Quando `paidAmount >= valor`, a dívida vira `PAGO`.
+
+### Webhook Dispatcher
+
+O componente `WebhookDispatcher` (src/services/WebhookDispatcher.ts) envia eventos `payment.confirmed` para uma URL externa configurada pelo admin. Disparado async via `setImmediate` após commit do callback. Assinatura HMAC-SHA256 no header `X-Tuppeware-Signature`. Retry 3x com backoff exponencial. Falhas não afetam o fluxo de pagamento.
+
+---
+
 ## Mapeamento de status eRede → local
 
 | returnCode | webhookStatus | Status local |

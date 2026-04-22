@@ -56,6 +56,31 @@
 | RF-26 | O sistema deve emitir evento `payment:created` via WebSocket na sala do usuário após criação de pagamento |
 | RF-27 | O sistema deve emitir evento `payment:updated` via WebSocket após callback atualizar status |
 
+### Pagamento Parcial e Webhook
+
+### RF-30 — Pagamento Parcial via PIX
+
+Permitir pagamento parcial de uma dívida única via PIX, habilitável via admin. Valor mínimo do parcial e valor mínimo sobrando configuráveis. Não aplicável a múltiplas dívidas em um único pagamento. Múltiplos parciais na mesma dívida são permitidos até quitar.
+
+**Configurações (admin):**
+- `partial_payment_enabled` — feature flag global
+- `partial_payment_min_amount` — valor mínimo por pagamento parcial
+- `partial_payment_min_remaining` — valor mínimo que pode ficar sobrando (exceto 0, que sempre é permitido)
+
+**Regra:** `amount >= min_amount` AND (`remaining_after == 0` OR `remaining_after >= min_remaining`)
+
+### RF-31 — Webhook de Pagamento Confirmado
+
+Enviar webhook HTTP POST assinado (HMAC-SHA256) para URL configurada pelo admin sempre que um pagamento é confirmado, incluindo pagamentos parciais e totais.
+
+**Configurações (admin):**
+- `payment_webhook_url` — destino (URL https ou vazio para desabilitar)
+- `payment_webhook_secret` — secret para HMAC (>= 16 chars)
+
+**Payload:** `paymentType: PARTIAL | FULL`, detalhes do `payment`, `debt` (incluindo `paidAmount`/`remaining`), `user`.
+**Assinatura:** header `X-Tuppeware-Signature: sha256=<hmac>` computada sobre `{timestamp}.{body}`.
+**Retry:** 3 tentativas com backoff exponencial (0s, 2s, 8s), timeout 5s por tentativa.
+
 ---
 
 ## Requisitos Não-Funcionais
