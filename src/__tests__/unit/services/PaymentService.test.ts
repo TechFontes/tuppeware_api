@@ -14,7 +14,7 @@ vi.mock('../../../repositories/PaymentRepository', () => ({
 }));
 
 vi.mock('../../../repositories/DebtRepository', () => ({
-  default: { findByIds: vi.fn(), updateMany: vi.fn() },
+  default: { findByIds: vi.fn(), findById: vi.fn(), updateMany: vi.fn() },
 }));
 
 vi.mock('../../../services/ERedeService', () => ({
@@ -36,7 +36,11 @@ vi.mock('../../../services/SavedCardService', () => ({
 }));
 
 vi.mock('../../../repositories/SettingsRepository', () => ({
-  default: { get: vi.fn().mockResolvedValue('5') },
+  default: { get: vi.fn().mockResolvedValue('5'), getAll: vi.fn() },
+}));
+
+vi.mock('../../../repositories/UserRepository', () => ({
+  default: { findById: vi.fn() },
 }));
 
 vi.mock('../../../repositories/SavedCardRepository', () => ({
@@ -49,6 +53,8 @@ import debtRepository from '../../../repositories/DebtRepository';
 import eRedeService from '../../../services/ERedeService';
 import webSocketService from '../../../services/WebSocketService';
 import savedCardRepository from '../../../repositories/SavedCardRepository';
+import settingsRepository from '../../../repositories/SettingsRepository';
+import userRepository from '../../../repositories/UserRepository';
 
 const makeDebt = (id: string, status = 'PENDENTE', valor = 150) => ({
   id, codigo: 'C001', nome: 'Consultora Test', grupo: 'G1', distrito: 'D1',
@@ -709,5 +715,100 @@ describe('PaymentService.create — pagamento com savedCardId (RF-29)', () => {
         }),
       }),
     );
+  });
+});
+
+describe('createPartial', () => {
+  const userId = 'user-1';
+  const baseDto = { debtId: 'd-1', amount: 40 };
+
+  const mkDebt = (overrides: Partial<any> = {}) => ({
+    id: 'd-1',
+    valor: 100,
+    paidAmount: 0,
+    status: 'PENDENTE',
+    codigo: '1234',
+    ...overrides,
+  });
+
+  const setSettings = (overrides: Record<string, string> = {}) => {
+    vi.mocked(settingsRepository.getAll).mockResolvedValue({
+      partial_payment_enabled: 'true',
+      partial_payment_min_amount: '10',
+      partial_payment_min_remaining: '5',
+      ...overrides,
+    });
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setSettings();
+    vi.mocked(debtRepository.findById).mockResolvedValue(mkDebt() as any);
+    vi.mocked(userRepository.findById).mockResolvedValue({ id: userId, cpf: '12345678900' } as any);
+    vi.mocked(eRedeService.buildPixPayload).mockReturnValue({} as any);
+    vi.mocked(eRedeService.createTransaction).mockResolvedValue({
+      tid: 'tid-1',
+      returnCode: '00',
+      qrCode: 'QR-DATA',
+    } as any);
+    vi.mocked(paymentRepository.create).mockResolvedValue({
+      id: 'p-1',
+      referenceNum: 'TPW-1',
+      qrCode: 'QR-DATA',
+    } as any);
+  });
+
+  it('cria parcial com valores válidos e retorna QR code', async () => {
+    const result = await paymentService.createPartial(userId, baseDto);
+    expect(result).toMatchObject({ paymentId: 'p-1', qrCode: 'QR-DATA' });
+    expect(paymentRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        isPartial: true,
+        subtotal: 40,
+        fee: 0,
+        totalValue: 40,
+        method: 'PIX',
+        installments: 1,
+      }),
+    );
+  });
+
+  it('bloqueia com 403 quando feature desabilitada', async () => {
+    setSettings({ partial_payment_enabled: 'false' });
+    await expect(paymentService.createPartial(userId, baseDto)).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  it('retorna 404 quando dívida não encontrada', async () => {
+    vi.mocked(debtRepository.findById).mockResolvedValue(null as any);
+    await expect(paymentService.createPartial(userId, baseDto)).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it('retorna 400 quando dívida já está PAGA', async () => {
+    vi.mocked(debtRepository.findById).mockResolvedValue(mkDebt({ status: 'PAGO' }) as any);
+    await expect(paymentService.createPartial(userId, baseDto)).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('retorna 400 quando amount < min_amount', async () => {
+    await expect(paymentService.createPartial(userId, { debtId: 'd-1', amount: 5 })).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('retorna 400 quando amount > restante', async () => {
+    vi.mocked(debtRepository.findById).mockResolvedValue(mkDebt({ paidAmount: 70 }) as any);
+    await expect(paymentService.createPartial(userId, { debtId: 'd-1', amount: 40 })).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('retorna 400 quando restante após o parcial viola min_remaining (ex: sobra 2 com min 5)', async () => {
+    // debt 100, paid 0, amount 98 -> sobra 2, min_remaining 5 -> rejeita
+    await expect(paymentService.createPartial(userId, { debtId: 'd-1', amount: 98 })).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('permite amount == restante (quita exato, remainingAfter = 0)', async () => {
+    vi.mocked(debtRepository.findById).mockResolvedValue(mkDebt({ paidAmount: 60 }) as any);
+    await expect(paymentService.createPartial(userId, { debtId: 'd-1', amount: 40 })).resolves.toBeDefined();
+  });
+
+  it('permite restante igual a min_remaining', async () => {
+    // debt 100, paid 0, amount 95 -> sobra 5, min_remaining 5 -> ok (>=)
+    await expect(paymentService.createPartial(userId, { debtId: 'd-1', amount: 95 })).resolves.toBeDefined();
   });
 });

@@ -7,6 +7,8 @@ import eRedeService from './ERedeService';
 import webSocketService from './WebSocketService';
 import savedCardService from './SavedCardService';
 import savedCardRepository from '../repositories/SavedCardRepository';
+import settingsRepository from '../repositories/SettingsRepository';
+import userRepository from '../repositories/UserRepository';
 import type { CreatePaymentDTO, ERedeCallbackPayload } from '../types';
 import type { Prisma } from '../../generated/prisma/client';
 
@@ -90,6 +92,7 @@ class PaymentService {
       processorReference: params.processorReference ?? null,
       paymentLink: params.paymentLink ?? null,
       qrCode: params.qrCode ?? null,
+      isPartial: params.isPartial ?? false,
       paymentDebts: {
         create: params.debtIds.map((debtId) => ({ debtId })),
       },
@@ -334,6 +337,88 @@ class PaymentService {
     });
 
     return updated;
+  }
+
+  /**
+   * Cria um pagamento parcial (PIX) para uma única dívida.
+   * TODO: findById não filtra por hierarquia do usuário — endereçar em task futura via middleware ou service layer.
+   */
+  async createPartial(userId: string, dto: { debtId: string; amount: number }) {
+    const settings = await settingsRepository.getAll();
+    if (settings.partial_payment_enabled !== 'true') {
+      throw new AppError('Pagamento parcial desabilitado', StatusCodes.FORBIDDEN);
+    }
+
+    const minAmount = parseFloat(settings.partial_payment_min_amount ?? '0');
+    const minRemaining = parseFloat(settings.partial_payment_min_remaining ?? '0');
+
+    const debt = await debtRepository.findById(dto.debtId);
+    if (!debt) {
+      throw new AppError('Dívida não encontrada', StatusCodes.NOT_FOUND);
+    }
+    if (debt.status === 'PAGO') {
+      throw new AppError('Dívida já paga', StatusCodes.BAD_REQUEST);
+    }
+
+    if (dto.amount < minAmount) {
+      throw new AppError(
+        `Valor mínimo para pagamento parcial: R$ ${minAmount.toFixed(2)}`,
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
+    const valor = parseFloat(debt.valor.toString());
+    const paid = parseFloat(debt.paidAmount.toString());
+    const remaining = valor - paid;
+
+    if (dto.amount > remaining) {
+      throw new AppError(
+        `Valor excede o restante (R$ ${remaining.toFixed(2)})`,
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
+    const remainingAfter = remaining - dto.amount;
+    if (remainingAfter !== 0 && remainingAfter < minRemaining) {
+      throw new AppError(
+        `Após o parcial deve sobrar R$ 0 ou ≥ R$ ${minRemaining.toFixed(2)}`,
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
+    const amountCents = Math.round(dto.amount * 100);
+    const referenceNum = this.generateReferenceNum(userId);
+
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new AppError('Usuário não encontrado', StatusCodes.NOT_FOUND);
+    }
+
+    const gatewayResp = await this._callGatewayPix(amountCents, referenceNum);
+
+    const payment = await this._persistPayment({
+      userId,
+      method: 'PIX',
+      installments: 1,
+      subtotal: dto.amount,
+      fee: 0,
+      totalValue: dto.amount,
+      status: 'PENDENTE',
+      referenceNum,
+      gatewayTransactionId: gatewayResp.tid || null,
+      gatewayStatusCode: gatewayResp.returnCode || null,
+      gatewayStatusMessage: gatewayResp.returnMessage || null,
+      paymentLink: gatewayResp.pix?.link || null,
+      qrCode: gatewayResp.pix?.qrCode ?? (gatewayResp as any).qrCode ?? null,
+      debtIds: [dto.debtId],
+      isPartial: true,
+    });
+
+    return {
+      paymentId: payment.id,
+      referenceNum: payment.referenceNum,
+      qrCode: payment.qrCode,
+    };
   }
 
   /**
