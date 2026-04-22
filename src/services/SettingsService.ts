@@ -15,6 +15,25 @@ const ALLOWED_SETTINGS: Record<string, (value: string) => boolean> = {
     const n = parseInt(v, 10);
     return !isNaN(n) && n > 0;
   },
+  partial_payment_enabled: (v) => v === 'true' || v === 'false',
+  partial_payment_min_amount: (v) => {
+    const n = parseFloat(v);
+    return !isNaN(n) && n > 0;
+  },
+  partial_payment_min_remaining: (v) => {
+    const n = parseFloat(v);
+    return !isNaN(n) && n >= 0;
+  },
+  payment_webhook_url: (v) => {
+    if (v === '') return true;
+    try {
+      const u = new URL(v);
+      return u.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  },
+  payment_webhook_secret: (v) => typeof v === 'string' && v.length >= 16,
 };
 
 class SettingsService {
