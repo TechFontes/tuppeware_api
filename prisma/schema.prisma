@@ -96,6 +96,7 @@ model Debt {
   distrito       String
   semana         String
   valor          Decimal    @db.Decimal(10, 2)
+  paidAmount     Decimal    @db.Decimal(10, 2) @default(0) @map("paid_amount")
   diasAtraso     Int        @map("dias_atraso")
   dataVencimento DateTime   @map("data_vencimento")
   numeroNf       String     @unique @map("numero_nf")
@@ -116,6 +117,7 @@ model Payment {
   subtotal             Decimal         @db.Decimal(10, 2)
   fee                  Decimal         @db.Decimal(10, 2) @default(0)
   totalValue           Decimal         @db.Decimal(10, 2) @map("total_value")
+  isPartial            Boolean         @default(false) @map("is_partial")
   status               PaymentStatus   @default(PENDENTE)
   gatewayProvider      GatewayProvider @default(EREDE) @map("gateway_provider")
   referenceNum         String?         @unique @map("reference_num")
