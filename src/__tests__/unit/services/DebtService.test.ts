@@ -386,3 +386,102 @@ describe('DebtService.authorizedFindById', () => {
       .rejects.toMatchObject({ statusCode: 403 });
   });
 });
+
+describe('DebtService.list — enriquecimento com paidAmount e remaining', () => {
+  it('adiciona paidAmount e remaining na resposta', async () => {
+    const debtWithPayment = {
+      id: 'd1', codigo: 'C001', nome: 'Maria Consultora', grupo: 'G1', distrito: 'D1',
+      semana: 'S01/2026', valor: 100, paidAmount: 40, diasAtraso: 5,
+      dataVencimento: new Date('2026-01-01'), numeroNf: 'NF-0001', status: 'PENDENTE',
+      createdAt: new Date(), updatedAt: new Date(),
+    };
+    vi.mocked(debtRepository.findMany).mockResolvedValueOnce({ data: [debtWithPayment as any], total: 1 });
+
+    const result = await debtService.list({ role: 'ADMIN', cpf: '' } as any, {});
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]).toHaveProperty('paidAmount', 40);
+    expect(result.data[0]).toHaveProperty('remaining', 60);
+  });
+
+  it('calcula remaining = valor - paidAmount', async () => {
+    const debtWithPayment = {
+      id: 'd1', codigo: 'C001', nome: 'Débito Parcial', grupo: 'G1', distrito: 'D1',
+      semana: 'S01/2026', valor: 250, paidAmount: 100, diasAtraso: 0,
+      dataVencimento: new Date('2026-01-01'), numeroNf: 'NF-0001', status: 'PENDENTE',
+      createdAt: new Date(), updatedAt: new Date(),
+    };
+    vi.mocked(debtRepository.findMany).mockResolvedValueOnce({ data: [debtWithPayment as any], total: 1 });
+
+    const result = await debtService.list({ role: 'ADMIN', cpf: '' } as any, {});
+
+    expect(result.data[0].remaining).toBe(150);
+  });
+
+  it('remaining = 0 quando paidAmount >= valor', async () => {
+    const debtFullyPaid = {
+      id: 'd1', codigo: 'C001', nome: 'Débito Pago', grupo: 'G1', distrito: 'D1',
+      semana: 'S01/2026', valor: 100, paidAmount: 100, diasAtraso: 0,
+      dataVencimento: new Date('2026-01-01'), numeroNf: 'NF-0001', status: 'PAGO',
+      createdAt: new Date(), updatedAt: new Date(),
+    };
+    vi.mocked(debtRepository.findMany).mockResolvedValueOnce({ data: [debtFullyPaid as any], total: 1 });
+
+    const result = await debtService.list({ role: 'ADMIN', cpf: '' } as any, {});
+
+    expect(result.data[0].remaining).toBe(0);
+  });
+
+  it('remaining = 0 quando paidAmount > valor (caso de borda)', async () => {
+    const debtOverpaid = {
+      id: 'd1', codigo: 'C001', nome: 'Débito', grupo: 'G1', distrito: 'D1',
+      semana: 'S01/2026', valor: 100, paidAmount: 150, diasAtraso: 0,
+      dataVencimento: new Date('2026-01-01'), numeroNf: 'NF-0001', status: 'PAGO',
+      createdAt: new Date(), updatedAt: new Date(),
+    };
+    vi.mocked(debtRepository.findMany).mockResolvedValueOnce({ data: [debtOverpaid as any], total: 1 });
+
+    const result = await debtService.list({ role: 'ADMIN', cpf: '' } as any, {});
+
+    expect(result.data[0].remaining).toBe(0);
+  });
+
+  it('paidAmount padrão é 0 quando não definido', async () => {
+    const debtWithoutPayment = {
+      id: 'd1', codigo: 'C001', nome: 'Débito Novo', grupo: 'G1', distrito: 'D1',
+      semana: 'S01/2026', valor: 100, paidAmount: undefined, diasAtraso: 5,
+      dataVencimento: new Date('2026-01-01'), numeroNf: 'NF-0001', status: 'PENDENTE',
+      createdAt: new Date(), updatedAt: new Date(),
+    };
+    vi.mocked(debtRepository.findMany).mockResolvedValueOnce({ data: [debtWithoutPayment as any], total: 1 });
+
+    const result = await debtService.list({ role: 'ADMIN', cpf: '' } as any, {});
+
+    expect(result.data[0].paidAmount).toBe(0);
+    expect(result.data[0].remaining).toBe(100);
+  });
+
+  it('enriquecimento funciona com múltiplas dívidas', async () => {
+    const debts = [
+      {
+        id: 'd1', codigo: 'C001', nome: 'Débito 1', grupo: 'G1', distrito: 'D1',
+        semana: 'S01/2026', valor: 100, paidAmount: 40, diasAtraso: 5,
+        dataVencimento: new Date('2026-01-01'), numeroNf: 'NF-0001', status: 'PENDENTE',
+        createdAt: new Date(), updatedAt: new Date(),
+      },
+      {
+        id: 'd2', codigo: 'C002', nome: 'Débito 2', grupo: 'G1', distrito: 'D1',
+        semana: 'S02/2026', valor: 200, paidAmount: 50, diasAtraso: 2,
+        dataVencimento: new Date('2026-02-01'), numeroNf: 'NF-0002', status: 'PENDENTE',
+        createdAt: new Date(), updatedAt: new Date(),
+      },
+    ];
+    vi.mocked(debtRepository.findMany).mockResolvedValueOnce({ data: debts as any, total: 2 });
+
+    const result = await debtService.list({ role: 'ADMIN', cpf: '' } as any, {});
+
+    expect(result.data).toHaveLength(2);
+    expect(result.data[0]).toEqual(expect.objectContaining({ paidAmount: 40, remaining: 60 }));
+    expect(result.data[1]).toEqual(expect.objectContaining({ paidAmount: 50, remaining: 150 }));
+  });
+});

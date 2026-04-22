@@ -46,7 +46,18 @@ class DebtService {
       take: limit,
     });
 
-    return paginatedResponse(data, total, page, limit);
+    // Enriquecer cada dívida com paidAmount e remaining
+    const enriched = data.map((d: any) => {
+      const valor = parseFloat(d.valor.toString());
+      const paid = parseFloat((d.paidAmount ?? 0).toString());
+      return {
+        ...d,
+        paidAmount: paid,
+        remaining: Math.max(0, valor - paid),
+      };
+    });
+
+    return paginatedResponse(enriched, total, page, limit);
   }
 
   /**
