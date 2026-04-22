@@ -5,6 +5,7 @@ vi.mock('../../../services/PaymentService', () => ({
   default: {
     processGatewayCallback: vi.fn(),
     create: vi.fn(),
+    createPartial: vi.fn(),
   },
 }));
 
@@ -99,5 +100,44 @@ describe('PaymentController.eredeCallback', () => {
     expect(res.status).toHaveBeenCalledWith(StatusCodes.OK);
 
     delete process.env.EREDE_CALLBACK_SECRET;
+  });
+});
+
+describe('PaymentController.createPartial', () => {
+  it('chama service e retorna 201 com payload', async () => {
+    vi.mocked(paymentService.createPartial).mockResolvedValue({
+      paymentId: 'p-1',
+      qrCode: 'QR',
+      referenceNum: 'TPW-1',
+    } as any);
+
+    const req: any = {
+      user: { id: 'u-1', role: 'CONSULTOR', cpf: '12345678900' },
+      body: { debtId: 'd-1', amount: 40 },
+    };
+    const res: any = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+
+    await paymentController.createPartial(req, res, vi.fn());
+
+    expect(paymentService.createPartial).toHaveBeenCalledWith(
+      'u-1',
+      { debtId: 'd-1', amount: 40 },
+      expect.objectContaining({ id: 'u-1', role: 'CONSULTOR' }),
+    );
+    expect(res.status).toHaveBeenCalledWith(StatusCodes.CREATED);
+    expect(res.json).toHaveBeenCalledWith({
+      paymentId: 'p-1',
+      qrCode: 'QR',
+      referenceNum: 'TPW-1',
+    });
+  });
+
+  it('propaga erro do service para next', async () => {
+    vi.mocked(paymentService.createPartial).mockRejectedValue(new Error('boom'));
+    const req: any = { user: { id: 'u-1' }, body: {} };
+    const res: any = {};
+    const next = vi.fn();
+    await paymentController.createPartial(req, res, next);
+    expect(next).toHaveBeenCalled();
   });
 });

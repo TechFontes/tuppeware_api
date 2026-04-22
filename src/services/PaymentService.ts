@@ -9,6 +9,7 @@ import savedCardService from './SavedCardService';
 import savedCardRepository from '../repositories/SavedCardRepository';
 import settingsRepository from '../repositories/SettingsRepository';
 import userRepository from '../repositories/UserRepository';
+import debtService from './DebtService';
 import type { CreatePaymentDTO, ERedeCallbackPayload } from '../types';
 import type { Prisma } from '../../generated/prisma/client';
 
@@ -341,9 +342,13 @@ class PaymentService {
 
   /**
    * Cria um pagamento parcial (PIX) para uma única dívida.
-   * TODO: findById não filtra por hierarquia do usuário — endereçar em task futura via middleware ou service layer.
+   * Filtra por hierarquia do usuário: CONSULTOR só acessa dívidas do seu código.
    */
-  async createPartial(userId: string, dto: { debtId: string; amount: number }) {
+  async createPartial(
+    userId: string,
+    dto: { debtId: string; amount: number },
+    user?: { id: string; role: string; cpf?: string },
+  ) {
     const settings = await settingsRepository.getAll();
     if (settings.partial_payment_enabled !== 'true') {
       throw new AppError('Pagamento parcial desabilitado', StatusCodes.FORBIDDEN);
@@ -352,7 +357,7 @@ class PaymentService {
     const minAmount = parseFloat(settings.partial_payment_min_amount ?? '0');
     const minRemaining = parseFloat(settings.partial_payment_min_remaining ?? '0');
 
-    const debt = await debtRepository.findById(dto.debtId);
+    const debt = await debtService.getByIdForUser(dto.debtId, user);
     if (!debt) {
       throw new AppError('Dívida não encontrada', StatusCodes.NOT_FOUND);
     }
@@ -389,8 +394,8 @@ class PaymentService {
     const amountCents = Math.round(dto.amount * 100);
     const referenceNum = this.generateReferenceNum(userId);
 
-    const user = await userRepository.findById(userId);
-    if (!user) {
+    const dbUser = await userRepository.findById(userId);
+    if (!dbUser) {
       throw new AppError('Usuário não encontrado', StatusCodes.NOT_FOUND);
     }
 

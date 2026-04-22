@@ -93,6 +93,20 @@ class DebtService {
   }
 
   /**
+   * Busca débito por ID respeitando hierarquia do usuário.
+   * Retorna null se não encontrado ou fora do escopo — sem 403 para não vazar existência.
+   */
+  async getByIdForUser(
+    id: string,
+    user?: { role?: string; cpf?: string },
+  ) {
+    const hierarchyWhere = await this._buildHierarchyWhere(user);
+    const where: Prisma.DebtWhereInput = { id, ...hierarchyWhere };
+    const { data } = await debtRepository.findMany({ where, take: 1 });
+    return data[0] ?? null;
+  }
+
+  /**
    * Cria ou atualiza um débito (admin).
    */
   async adminCreateDebt(data: {
@@ -142,6 +156,38 @@ class DebtService {
         updatedAt: { gte: today, lt: tomorrow },
       },
     });
+  }
+
+  /**
+   * Constrói cláusula WHERE somente com filtro de hierarquia (sem filtros de query).
+   * Usado por getByIdForUser para verificar visibilidade sem vazar detalhes.
+   */
+  private async _buildHierarchyWhere(
+    user?: { role?: string; cpf?: string },
+  ): Promise<Prisma.DebtWhereInput> {
+    const where: Prisma.DebtWhereInput = {};
+
+    if (!user || user.role === 'ADMIN' || user.role === 'GERENTE') {
+      return where;
+    }
+
+    if (['EMPRESARIA', 'LIDER', 'CONSULTOR'].includes(user.role ?? '')) {
+      const consultant = await consultantRepository.findByCpf(user.cpf ?? '');
+
+      if (!consultant) {
+        throw new AppError('Consultor não vinculado.', StatusCodes.FORBIDDEN);
+      }
+
+      if (user.role === 'EMPRESARIA') {
+        where.distrito = consultant.distrito;
+      } else if (user.role === 'LIDER') {
+        where.grupo = consultant.grupo;
+      } else if (user.role === 'CONSULTOR') {
+        where.codigo = consultant.codigo;
+      }
+    }
+
+    return where;
   }
 
   /**

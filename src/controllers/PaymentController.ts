@@ -6,6 +6,20 @@ import type { ERedeCallbackPayload } from '../types';
 
 class PaymentController {
   /**
+   * POST /api/payments/partial
+   * Cria um pagamento parcial PIX para uma única dívida.
+   */
+  async createPartial(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const user = (req as any).user;
+      const result = await paymentService.createPartial(user.id, req.body, user);
+      res.status(StatusCodes.CREATED).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
    * POST /api/payments
    * Cria um pagamento e envia para a eRede.
    */

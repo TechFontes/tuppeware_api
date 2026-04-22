@@ -47,6 +47,10 @@ vi.mock('../../../repositories/SavedCardRepository', () => ({
   default: { findById: vi.fn() },
 }));
 
+vi.mock('../../../services/DebtService', () => ({
+  default: { getByIdForUser: vi.fn() },
+}));
+
 import paymentService from '../../../services/PaymentService';
 import paymentRepository from '../../../repositories/PaymentRepository';
 import debtRepository from '../../../repositories/DebtRepository';
@@ -55,6 +59,7 @@ import webSocketService from '../../../services/WebSocketService';
 import savedCardRepository from '../../../repositories/SavedCardRepository';
 import settingsRepository from '../../../repositories/SettingsRepository';
 import userRepository from '../../../repositories/UserRepository';
+import debtService from '../../../services/DebtService';
 
 const makeDebt = (id: string, status = 'PENDENTE', valor = 150) => ({
   id, codigo: 'C001', nome: 'Consultora Test', grupo: 'G1', distrito: 'D1',
@@ -743,7 +748,7 @@ describe('createPartial', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setSettings();
-    vi.mocked(debtRepository.findById).mockResolvedValue(mkDebt() as any);
+    vi.mocked(debtService.getByIdForUser).mockResolvedValue(mkDebt() as any);
     vi.mocked(userRepository.findById).mockResolvedValue({ id: userId, cpf: '12345678900' } as any);
     vi.mocked(eRedeService.buildPixPayload).mockReturnValue({} as any);
     vi.mocked(eRedeService.createTransaction).mockResolvedValue({
@@ -779,12 +784,12 @@ describe('createPartial', () => {
   });
 
   it('retorna 404 quando dívida não encontrada', async () => {
-    vi.mocked(debtRepository.findById).mockResolvedValue(null as any);
+    vi.mocked(debtService.getByIdForUser).mockResolvedValue(null as any);
     await expect(paymentService.createPartial(userId, baseDto)).rejects.toMatchObject({ statusCode: 404 });
   });
 
   it('retorna 400 quando dívida já está PAGA', async () => {
-    vi.mocked(debtRepository.findById).mockResolvedValue(mkDebt({ status: 'PAGO' }) as any);
+    vi.mocked(debtService.getByIdForUser).mockResolvedValue(mkDebt({ status: 'PAGO' }) as any);
     await expect(paymentService.createPartial(userId, baseDto)).rejects.toMatchObject({ statusCode: 400 });
   });
 
@@ -793,7 +798,7 @@ describe('createPartial', () => {
   });
 
   it('retorna 400 quando amount > restante', async () => {
-    vi.mocked(debtRepository.findById).mockResolvedValue(mkDebt({ paidAmount: 70 }) as any);
+    vi.mocked(debtService.getByIdForUser).mockResolvedValue(mkDebt({ paidAmount: 70 }) as any);
     await expect(paymentService.createPartial(userId, { debtId: 'd-1', amount: 40 })).rejects.toMatchObject({ statusCode: 400 });
   });
 
@@ -803,12 +808,19 @@ describe('createPartial', () => {
   });
 
   it('permite amount == restante (quita exato, remainingAfter = 0)', async () => {
-    vi.mocked(debtRepository.findById).mockResolvedValue(mkDebt({ paidAmount: 60 }) as any);
+    vi.mocked(debtService.getByIdForUser).mockResolvedValue(mkDebt({ paidAmount: 60 }) as any);
     await expect(paymentService.createPartial(userId, { debtId: 'd-1', amount: 40 })).resolves.toBeDefined();
   });
 
   it('permite restante igual a min_remaining', async () => {
     // debt 100, paid 0, amount 95 -> sobra 5, min_remaining 5 -> ok (>=)
     await expect(paymentService.createPartial(userId, { debtId: 'd-1', amount: 95 })).resolves.toBeDefined();
+  });
+
+  it('retorna 404 quando dívida existe mas fora do escopo do usuário', async () => {
+    vi.mocked(debtService.getByIdForUser).mockResolvedValue(null as any);
+    await expect(
+      paymentService.createPartial('u-1', { debtId: 'd-of-other', amount: 40 }, { id: 'u-1', role: 'CONSULTOR', cpf: '111' }),
+    ).rejects.toMatchObject({ statusCode: 404 });
   });
 });

@@ -4,6 +4,7 @@ import { authMiddleware } from '../middlewares/authMiddleware';
 import { paymentLinkRateLimiter } from '../middlewares/rateLimitMiddleware';
 import { createPaymentValidator } from '../validators/paymentValidator';
 import { validate } from '../validators/validationMiddleware';
+import partialPaymentValidator from '../validators/partialPaymentValidator';
 
 const router = Router();
 
@@ -87,6 +88,13 @@ router.post(
   createPaymentValidator,
   validate,
   (req: Request, res: Response, next: NextFunction) => paymentController.create(req, res, next),
+);
+
+router.post(
+  '/partial',
+  paymentLinkRateLimiter,
+  partialPaymentValidator,
+  (req: Request, res: Response, next: NextFunction) => paymentController.createPartial(req, res, next),
 );
 
 export default router;
