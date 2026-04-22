@@ -21,13 +21,9 @@ interface PaymentQuery {
 
 class PaymentService {
   /**
-   * Cria um pagamento na eRede.
+   * Valida que os débitos existem e nenhum está pago.
    */
-  async create(userId: string, payload: CreatePaymentDTO) {
-    const { debtIds, method, installments, billing, saveCard, savedCardId } = payload;
-    let card = payload.card;
-
-    // Busca os débitos selecionados
+  private async _validateDebtsExist(debtIds: string[]) {
     const debts = await debtRepository.findByIds(debtIds);
 
     if (debts.length === 0) {
@@ -38,12 +34,77 @@ class PaymentService {
       throw new AppError('Alguns débitos não foram encontrados.', StatusCodes.BAD_REQUEST);
     }
 
-    // Verifica se algum débito já está pago
     const paidDebts = debts.filter((d) => d.status === 'PAGO');
 
     if (paidDebts.length > 0) {
       throw new AppError('Alguns débitos selecionados já estão pagos.', StatusCodes.BAD_REQUEST);
     }
+
+    return debts;
+  }
+
+  /**
+   * Chama o gateway eRede para uma transação PIX.
+   */
+  private async _callGatewayPix(amountCents: number, referenceNum: string) {
+    const pixPayload = eRedeService.buildPixPayload(referenceNum, amountCents);
+    return await eRedeService.createTransaction(pixPayload);
+  }
+
+  /**
+   * Persiste o pagamento no banco de dados.
+   */
+  private async _persistPayment(params: {
+    userId: string;
+    method: 'PIX' | 'CARTAO_CREDITO';
+    installments: number;
+    subtotal: number;
+    fee: number;
+    totalValue: number;
+    status: 'PENDENTE' | 'PAGO' | 'CANCELADO';
+    referenceNum: string;
+    gatewayTransactionId?: string | null;
+    gatewayOrderId?: string | null;
+    gatewayStatusCode?: string | null;
+    gatewayStatusMessage?: string | null;
+    processorReference?: string | null;
+    paymentLink?: string | null;
+    qrCode?: string | null;
+    debtIds: string[];
+    isPartial?: boolean;
+  }) {
+    return await paymentRepository.create({
+      userId: params.userId,
+      method: params.method,
+      installments: params.installments,
+      subtotal: params.subtotal,
+      fee: params.fee,
+      totalValue: params.totalValue,
+      status: params.status,
+      gatewayProvider: 'EREDE',
+      referenceNum: params.referenceNum,
+      gatewayTransactionId: params.gatewayTransactionId ?? null,
+      gatewayOrderId: params.gatewayOrderId ?? null,
+      gatewayStatusCode: params.gatewayStatusCode ?? null,
+      gatewayStatusMessage: params.gatewayStatusMessage ?? null,
+      processorReference: params.processorReference ?? null,
+      paymentLink: params.paymentLink ?? null,
+      qrCode: params.qrCode ?? null,
+      paymentDebts: {
+        create: params.debtIds.map((debtId) => ({ debtId })),
+      },
+    });
+  }
+
+  /**
+   * Cria um pagamento na eRede.
+   */
+  async create(userId: string, payload: CreatePaymentDTO) {
+    const { debtIds, method, installments, billing, saveCard, savedCardId } = payload;
+    let card = payload.card;
+
+    // Busca e valida os débitos selecionados
+    const debts = await this._validateDebtsExist(debtIds);
 
     // Calcula valores
     const subtotal = debts.reduce((sum, d) => sum + parseFloat(d.valor.toString()), 0);
@@ -102,26 +163,23 @@ class PaymentService {
     // eRede exige valor em centavos (inteiro)
     const amountCents = Math.round(totalValue * 100);
 
-    // Monta payload para a eRede
-    const eredePayload = method === 'PIX'
-      ? eRedeService.buildPixPayload(referenceNum, amountCents)
-      : eRedeService.buildCreditPayload({
+    // Cria transação na eRede
+    const gatewayResponse = method === 'PIX'
+      ? await this._callGatewayPix(amountCents, referenceNum)
+      : await eRedeService.createTransaction(eRedeService.buildCreditPayload({
           reference: referenceNum,
           amountCents,
           installments: installments || 1,
           card: card!,
           billing: billing!,
           cardToken,
-        });
-
-    // Cria transação na eRede
-    const gatewayResponse = await eRedeService.createTransaction(eredePayload);
+        }));
 
     // Determina status inicial com base no returnCode antes de criar o registro
     const initialStatus = eRedeService.mapStatusToLocal(gatewayResponse.returnCode);
 
     // Cria o pagamento no banco com status já definido (evita update separado pós-criação)
-    const payment = await paymentRepository.create({
+    const payment = await this._persistPayment({
       userId,
       method,
       installments: method === 'CARTAO_CREDITO' ? (installments || 1) : 1,
@@ -129,20 +187,15 @@ class PaymentService {
       fee,
       totalValue,
       status: initialStatus,
-      gatewayProvider: 'EREDE',
       referenceNum,
       gatewayTransactionId: gatewayResponse.tid || null,
       gatewayOrderId: gatewayResponse.nsu || null,
       gatewayStatusCode: gatewayResponse.returnCode,
       gatewayStatusMessage: gatewayResponse.returnMessage,
       processorReference: gatewayResponse.authorizationCode || null,
-      // PIX: link da imagem do QR code; cartão: null (aprovação síncrona)
       paymentLink: gatewayResponse.pix?.link || null,
-      // String EMV para copiar-colar (PIX)
       qrCode: gatewayResponse.pix?.qrCode || null,
-      paymentDebts: {
-        create: debtIds.map((debtId) => ({ debtId })),
-      },
+      debtIds,
     });
 
     // Atualiza débitos se pagamento aprovado imediatamente
