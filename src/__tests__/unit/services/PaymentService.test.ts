@@ -726,6 +726,68 @@ describe('PaymentService.create — pagamento com savedCardId (RF-29)', () => {
   });
 });
 
+describe('PaymentService.create — persiste nsu e authorizationCode do gateway', () => {
+  it('create: persiste nsu e authorizationCode retornados pelo gateway', async () => {
+    vi.mocked(debtRepository.findByIds).mockResolvedValueOnce([makeDebt('d1', 'PENDENTE', 150) as any]);
+    vi.mocked(eRedeService.createTransaction).mockResolvedValueOnce({
+      tid: 'tid-1',
+      returnCode: '00',
+      returnMessage: 'OK',
+      reference: 'TPW-mock',
+      nsu: '123456',
+      authorizationCode: '789012',
+      pix: { qrCode: 'QR', link: 'https://pix.link', expirationDate: '' },
+      raw: {},
+    });
+    vi.mocked(eRedeService.mapStatusToLocal).mockReturnValueOnce('PAGO');
+
+    let capturedCreate: any;
+    vi.mocked(paymentRepository.create).mockImplementationOnce(async (data: any) => {
+      capturedCreate = data;
+      return makePayment() as any;
+    });
+
+    await paymentService.create('user-uuid-1', { debtIds: ['d1'], method: 'PIX', billing: billingBase });
+
+    expect(capturedCreate).toMatchObject({
+      nsu: '123456',
+      authorizationCode: '789012',
+    });
+  });
+
+  it('createPartial: persiste nsu retornado pelo gateway PIX', async () => {
+    vi.mocked(settingsRepository.getAll).mockResolvedValueOnce({
+      partial_payment_enabled: 'true',
+      partial_payment_min_amount: '10',
+      partial_payment_min_remaining: '5',
+    });
+    vi.mocked(debtService.getByIdForUser).mockResolvedValueOnce({
+      id: 'd-1', valor: 100, paidAmount: 0, status: 'PENDENTE', codigo: '1234',
+    } as any);
+    vi.mocked(userRepository.findById).mockResolvedValueOnce({ id: 'user-1', cpf: '12345678900' } as any);
+    vi.mocked(eRedeService.buildPixPayload).mockReturnValueOnce({} as any);
+    vi.mocked(eRedeService.createTransaction).mockResolvedValueOnce({
+      tid: 'tid-pix',
+      returnCode: '00',
+      returnMessage: 'OK',
+      nsu: '999888',
+      raw: {},
+    } as any);
+
+    let capturedCreate: any;
+    vi.mocked(paymentRepository.create).mockImplementationOnce(async (data: any) => {
+      capturedCreate = data;
+      return { id: 'p-new', referenceNum: 'TPW-1', qrCode: null } as any;
+    });
+
+    await paymentService.createPartial('user-1', { debtId: 'd-1', amount: 40 });
+
+    expect(capturedCreate).toMatchObject({
+      nsu: '999888',
+    });
+  });
+});
+
 describe('createPartial', () => {
   const userId = 'user-1';
   const baseDto = { debtId: 'd-1', amount: 40 };

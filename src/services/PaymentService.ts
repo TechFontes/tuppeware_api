@@ -74,6 +74,8 @@ class PaymentService {
     processorReference?: string | null;
     paymentLink?: string | null;
     qrCode?: string | null;
+    nsu?: string | null;
+    authorizationCode?: string | null;
     debtIds: string[];
     isPartial?: boolean;
   }) {
@@ -94,6 +96,8 @@ class PaymentService {
       processorReference: params.processorReference ?? null,
       paymentLink: params.paymentLink ?? null,
       qrCode: params.qrCode ?? null,
+      nsu: params.nsu ?? null,
+      authorizationCode: params.authorizationCode ?? null,
       isPartial: params.isPartial ?? false,
       paymentDebts: {
         create: params.debtIds.map((debtId) => ({ debtId })),
@@ -200,6 +204,8 @@ class PaymentService {
       processorReference: gatewayResponse.authorizationCode || null,
       paymentLink: gatewayResponse.pix?.link || null,
       qrCode: gatewayResponse.pix?.qrCode || null,
+      nsu: gatewayResponse.nsu ?? null,
+      authorizationCode: gatewayResponse.authorizationCode ?? null,
       debtIds,
     });
 
@@ -525,6 +531,8 @@ class PaymentService {
       gatewayStatusMessage: gatewayResp.returnMessage || null,
       paymentLink: gatewayResp.pix?.link || null,
       qrCode: gatewayResp.pix?.qrCode ?? (gatewayResp as any).qrCode ?? null,
+      nsu: gatewayResp.nsu ?? null,
+      authorizationCode: gatewayResp.authorizationCode ?? null,
       debtIds: [dto.debtId],
       isPartial: true,
     });
