@@ -125,6 +125,8 @@ model Payment {
   gatewayOrderId       String?         @map("gateway_order_id")
   gatewayStatusCode    String?         @map("gateway_status_code")
   gatewayStatusMessage String?         @map("gateway_status_message")
+  nsu                  String?         @db.VarChar(50)
+  authorizationCode    String?         @map("authorization_code") @db.VarChar(50)
   processorReference   String?         @map("processor_reference")
   paymentLink          String?         @map("payment_link") @db.Text
   qrCode               String?         @map("qr_code") @db.Text
