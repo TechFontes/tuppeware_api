@@ -52,6 +52,12 @@
 }
 ```
 
+**Campos adicionais (quando disponíveis):**
+- `nsu` — Número Sequencial Único gerado pela adquirente. Em PIX, costuma vir apenas no callback assíncrono após confirmação.
+- `brand.authorizationCode` ou `authorizationCode` (raiz) — Código de autorização, tipicamente presente em transações com cartão.
+
+Ambos os campos são persistidos em `Payment.nsu` e `Payment.authorizationCode` quando presentes na resposta de criação OU no callback.
+
 ---
 
 ## Payload de criação — Cartão de crédito
@@ -167,3 +173,16 @@ Quando o pagamento usa um cartão previamente salvo, o payload de criação de t
 ## Validação de callbacks
 
 A eRede não usa HMAC. A validação atual verifica estrutura mínima (`tid` presente, `returnCode` definido). Segurança adicional deve ser garantida por HTTPS + whitelist de IPs do gateway no firewall.
+
+---
+
+## Persistência de identificadores
+
+| Campo | Origem | Tabela `payments` |
+|---|---|---|
+| TID | gerado pela Rede | `gateway_transaction_id` |
+| NCU | gerado pelo Tuppeware (`TPW-{ts}-{userId}`) | `reference_num` |
+| NSU | gerado pela adquirente/bandeira | `nsu` |
+| authorizationCode | código de autorização da bandeira | `authorization_code` |
+
+Todos são expostos automaticamente nas respostas de `GET /api/payment-history` e `GET /api/payment-history/:id`.

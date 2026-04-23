@@ -173,6 +173,8 @@ const options: swaggerJsdoc.Options = {
             processorReference: { type: 'string', nullable: true },
             paymentLink: { type: 'string', nullable: true },
             qrCode: { type: 'string', nullable: true, description: 'String EMV do QR Code PIX (copiar-colar)' },
+            nsu: { type: 'string', nullable: true, description: 'Número Sequencial Único — identificador da adquirente/bandeira, gerado após confirmação', example: '123456' },
+            authorizationCode: { type: 'string', nullable: true, description: 'Código de autorização retornado pela bandeira (presente em pagamentos com cartão)', example: '789012' },
             isPartial: { type: 'boolean', description: 'Indica se este pagamento é um pagamento parcial de uma dívida' },
             callbackPayload: { type: 'object', nullable: true },
             createdAt: { type: 'string', format: 'date-time' },
