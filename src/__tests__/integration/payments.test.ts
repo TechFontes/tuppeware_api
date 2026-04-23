@@ -113,4 +113,61 @@ describe('GET /api/payments/:id (via paymentHistoryRoutes)', () => {
     const found = histRes.body.data?.find((p: any) => p.id === paymentId);
     expect(found).toBeDefined();
   });
+
+  it('GET /api/payment-history/:id expõe nsu e authorizationCode quando presentes', async () => {
+    // Cria um pagamento
+    const createRes = await api
+      .post('/api/payments')
+      .set(authHeader(user.id, 'CONSULTOR', user.email))
+      .send({ debtIds: [debt1.id], method: 'PIX', billing: billingBase });
+
+    expect(createRes.status).toBe(201);
+    const paymentId = createRes.body.data.id;
+
+    // Atualiza o pagamento com nsu e authorizationCode via callback simulado
+    await prisma.payment.update({
+      where: { id: paymentId },
+      data: {
+        nsu: 'NSU-TEST-123',
+        authorizationCode: 'AUTH-CODE-456',
+      },
+    });
+
+    // Busca o pagamento específico
+    const detailRes = await api
+      .get(`/api/payment-history/${paymentId}`)
+      .set(authHeader(user.id, 'CONSULTOR', user.email));
+
+    expect(detailRes.status).toBe(200);
+    expect(detailRes.body.data).toHaveProperty('nsu', 'NSU-TEST-123');
+    expect(detailRes.body.data).toHaveProperty('authorizationCode', 'AUTH-CODE-456');
+  });
+
+  it('GET /api/payment-history lista com nsu e authorizationCode exposto', async () => {
+    // Cria um pagamento
+    const createRes = await api
+      .post('/api/payments')
+      .set(authHeader(user.id, 'CONSULTOR', user.email))
+      .send({ debtIds: [smallDebt.id], method: 'PIX', billing: billingBase });
+
+    expect(createRes.status).toBe(201);
+    const paymentId = createRes.body.data.id;
+
+    // Atualiza com nsu
+    await prisma.payment.update({
+      where: { id: paymentId },
+      data: { nsu: 'NSU-LIST-789', authorizationCode: 'AUTH-LIST-000' },
+    });
+
+    // Lista o histórico
+    const listRes = await api
+      .get('/api/payment-history')
+      .set(authHeader(user.id, 'CONSULTOR', user.email));
+
+    expect(listRes.status).toBe(200);
+    const payment = listRes.body.data?.find((p: any) => p.id === paymentId);
+    expect(payment).toBeDefined();
+    expect(payment).toHaveProperty('nsu', 'NSU-LIST-789');
+    expect(payment).toHaveProperty('authorizationCode', 'AUTH-LIST-000');
+  });
 });

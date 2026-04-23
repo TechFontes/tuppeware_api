@@ -1118,3 +1118,68 @@ describe('processGatewayCallback — parcial + webhook', () => {
     expect(updateData).not.toHaveProperty('nsu', undefined);
   });
 });
+
+describe('PaymentService — exposição de nsu e authorizationCode nas respostas GET', () => {
+  const mockPaymentWithNsuAndAuth = {
+    id: 'payment-nsu-auth-1',
+    userId: 'user-1',
+    method: 'CARTAO_CREDITO',
+    installments: 1,
+    subtotal: 150,
+    fee: 7.5,
+    totalValue: 157.5,
+    isPartial: false,
+    status: 'PAGO',
+    gatewayProvider: 'EREDE',
+    referenceNum: 'TPW-123456-user-1',
+    gatewayTransactionId: 'tid-xyz',
+    gatewayOrderId: 'order-123',
+    gatewayStatusCode: '00',
+    gatewayStatusMessage: 'Aprovado',
+    nsu: '123456789',
+    authorizationCode: 'AUTH-ABC-123',
+    processorReference: null,
+    paymentLink: null,
+    qrCode: null,
+    callbackPayload: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    paymentDebts: [{ debtId: 'debt-1' }],
+  };
+
+  it('getById retorna payment com nsu e authorizationCode', async () => {
+    vi.mocked(paymentRepository.findById).mockResolvedValue(mockPaymentWithNsuAndAuth as any);
+
+    const result = await paymentService.getById('user-1', 'payment-nsu-auth-1');
+
+    expect(result).toHaveProperty('nsu', '123456789');
+    expect(result).toHaveProperty('authorizationCode', 'AUTH-ABC-123');
+  });
+
+  it('getHistory retorna payments com nsu e authorizationCode', async () => {
+    const mockPayments = [mockPaymentWithNsuAndAuth];
+    vi.mocked(paymentRepository.findByUserId).mockResolvedValue({
+      data: mockPayments as any,
+      total: 1,
+    });
+
+    const result = await paymentService.getHistory('user-1', {});
+
+    expect(result.data).toHaveLength(1);
+    const payment = result.data[0];
+    expect(payment).toHaveProperty('nsu', '123456789');
+    expect(payment).toHaveProperty('authorizationCode', 'AUTH-ABC-123');
+  });
+
+  it('getById com valores null não omite nsu e authorizationCode', async () => {
+    const paymentWithNullValues = { ...mockPaymentWithNsuAndAuth, nsu: null, authorizationCode: null };
+    vi.mocked(paymentRepository.findById).mockResolvedValue(paymentWithNullValues as any);
+
+    const result = await paymentService.getById('user-1', 'payment-nsu-auth-1');
+
+    expect(result).toHaveProperty('nsu');
+    expect(result.nsu).toBeNull();
+    expect(result).toHaveProperty('authorizationCode');
+    expect(result.authorizationCode).toBeNull();
+  });
+});
