@@ -1048,4 +1048,73 @@ describe('processGatewayCallback — parcial + webhook', () => {
     await new Promise((r) => setImmediate(r));
     expect(webhookDispatcher.send).not.toHaveBeenCalled();
   });
+
+  it('persiste nsu e authorizationCode quando vêm no callback', async () => {
+    const payment = {
+      id: 'p-nsu-1',
+      referenceNum: 'TPW-NSU',
+      totalValue: 40,
+      isPartial: false,
+      status: 'PENDENTE',
+      userId: 'u-1',
+      method: 'PIX',
+      gatewayStatusCode: null,
+      gatewayTransactionId: 'tid-nsu-1',
+      paymentDebts: [
+        { debtId: 'd-1', debt: { id: 'd-1', codigo: '1', valor: 100, paidAmount: 0, status: 'PENDENTE' } },
+      ],
+    };
+    vi.mocked(paymentRepository.findByGatewayTransactionId).mockResolvedValue(payment as any);
+    vi.mocked(paymentRepository.update).mockResolvedValue(payment as any);
+    vi.mocked(debtRepository.updateMany).mockResolvedValue({ count: 1 } as any);
+
+    await paymentService.processGatewayCallback({
+      reference: 'TPW-NSU',
+      returnCode: '00',
+      tid: 'tid-nsu-1',
+      nsu: 'NSU-999',
+      authorizationCode: 'AUTH-123',
+    } as any);
+
+    expect(paymentRepository.update).toHaveBeenCalledWith(
+      'p-nsu-1',
+      expect.objectContaining({
+        nsu: 'NSU-999',
+        authorizationCode: 'AUTH-123',
+      }),
+    );
+  });
+
+  it('não sobrescreve nsu existente com undefined quando callback omite', async () => {
+    const payment = {
+      id: 'p-nsu-2',
+      referenceNum: 'TPW-NSU2',
+      totalValue: 40,
+      isPartial: false,
+      status: 'PENDENTE',
+      userId: 'u-1',
+      method: 'PIX',
+      gatewayStatusCode: null,
+      gatewayTransactionId: 'tid-nsu-2',
+      nsu: 'NSU-OLD',
+      authorizationCode: null,
+      paymentDebts: [
+        { debtId: 'd-2', debt: { id: 'd-2', codigo: '2', valor: 100, paidAmount: 0, status: 'PENDENTE' } },
+      ],
+    };
+    vi.mocked(paymentRepository.findByGatewayTransactionId).mockResolvedValue(payment as any);
+    vi.mocked(paymentRepository.update).mockResolvedValue(payment as any);
+    vi.mocked(debtRepository.updateMany).mockResolvedValue({ count: 1 } as any);
+
+    await paymentService.processGatewayCallback({
+      reference: 'TPW-NSU2',
+      returnCode: '00',
+      tid: 'tid-nsu-2',
+      // sem nsu/authorizationCode
+    } as any);
+
+    const updateCall = vi.mocked(paymentRepository.update).mock.calls[0];
+    const updateData = updateCall[1];
+    expect(updateData).not.toHaveProperty('nsu', undefined);
+  });
 });

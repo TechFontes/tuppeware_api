@@ -320,13 +320,22 @@ class PaymentService {
       return payment;
     }
 
-    const updated = await paymentRepository.update(payment.id, {
+    const updateData: Prisma.PaymentUpdateInput = {
       status: localStatus,
       gatewayStatusCode: returnCode,
       gatewayStatusMessage: String(eredeStatus ?? ''),
       gatewayTransactionId: tid || payment.gatewayTransactionId,
       callbackPayload: callbackPayload as unknown as Prisma.InputJsonValue,
-    });
+    };
+
+    if (callbackPayload.nsu) {
+      updateData.nsu = callbackPayload.nsu;
+    }
+    if (callbackPayload.authorizationCode) {
+      updateData.authorizationCode = callbackPayload.authorizationCode;
+    }
+
+    const updated = await paymentRepository.update(payment.id, updateData);
 
     if (localStatus === 'PAGO') {
       if (payment.isPartial && payment.paymentDebts.length > 0) {

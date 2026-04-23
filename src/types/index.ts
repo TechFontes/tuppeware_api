@@ -164,4 +164,6 @@ export interface ERedeCallbackPayload {
   status: number;
   reference: string;
   amount: number;
+  nsu?: string;
+  authorizationCode?: string;
 }
