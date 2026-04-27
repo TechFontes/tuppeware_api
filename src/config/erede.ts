@@ -1,5 +1,5 @@
-const eredeSandboxUrl = 'https://sandbox-erede.useredecloud.com.br/rede/v1/transactions';
-const eredeProductionUrl = 'https://api.userede.com.br/rede/v1/transactions';
+const eredeSandboxUrl = 'https://sandbox-erede.useredecloud.com.br/v1/transactions';
+const eredeProductionUrl = 'https://api.userede.com.br/erede/v1/transactions';
 
 export const eredePv = process.env.EREDE_PV || '';
 export const eredeIntegrationKey = process.env.EREDE_INTEGRATION_KEY || '';
