@@ -15,12 +15,51 @@ router.use(authMiddleware);
  *   get:
  *     tags: [Users]
  *     summary: Obter perfil próprio
- *     description: Retorna os dados do usuário autenticado, incluindo dados de consultor se vinculado.
+ *     description: |
+ *       Retorna os dados do usuário autenticado, dados de consultor se vinculado e
+ *       o bloco `settings` com flags globais públicas do sistema (consumido pelo frontend
+ *       para decidir, por exemplo, se o fluxo de pagamento parcial deve ser exibido).
+ *
+ *       Chaves expostas em `settings`:
+ *       - `partialPaymentEnabled` (boolean) — feature flag de pagamento parcial
+ *       - `partialPaymentMinAmount` (string | null) — valor mínimo por parcial
+ *       - `partialPaymentMinRemaining` (string | null) — valor mínimo restante após parcial
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Perfil do usuário
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     role:
+ *                       type: string
+ *                     settings:
+ *                       type: object
+ *                       properties:
+ *                         partialPaymentEnabled:
+ *                           type: boolean
+ *                           example: true
+ *                         partialPaymentMinAmount:
+ *                           type: string
+ *                           nullable: true
+ *                           example: "10.00"
+ *                         partialPaymentMinRemaining:
+ *                           type: string
+ *                           nullable: true
+ *                           example: "20.00"
  *       401:
  *         description: Não autenticado
  */

@@ -12,6 +12,12 @@ vi.mock('../../../services/UserService', () => ({
   },
 }));
 
+vi.mock('../../../services/SettingsService', () => ({
+  default: {
+    getAll: vi.fn(),
+  },
+}));
+
 vi.mock('../../../repositories/SavedCardRepository', () => ({
   default: {
     findByUserId: vi.fn(),
@@ -22,6 +28,8 @@ vi.mock('../../../repositories/SavedCardRepository', () => ({
 
 import userController from '../../../controllers/UserController';
 import savedCardService from '../../../services/SavedCardService';
+import userService from '../../../services/UserService';
+import settingsService from '../../../services/SettingsService';
 
 const makeReq = (userId = 'user-1', params: Record<string, string> = {}, body: object = {}) => ({
   user: { id: userId, role: 'CONSULTOR', email: 'x@x.com' },
@@ -39,6 +47,82 @@ const makeRes = () => {
 const makeNext = () => vi.fn();
 
 beforeEach(() => vi.clearAllMocks());
+
+describe('UserController.getMe', () => {
+  it('inclui bloco settings com flags públicas tipadas', async () => {
+    vi.mocked(userService.findById).mockResolvedValueOnce({
+      id: 'user-1',
+      email: 'x@x.com',
+      role: 'CONSULTOR',
+    } as any);
+    vi.mocked(settingsService.getAll).mockResolvedValueOnce({
+      partial_payment_enabled: 'true',
+      partial_payment_min_amount: '10.00',
+      partial_payment_min_remaining: '20.00',
+      payment_webhook_secret: 'super-secret-32-characters-long!',
+      payment_webhook_url: 'https://example.com/hook',
+    });
+
+    const req = makeReq('user-1');
+    const res = makeRes();
+    const next = makeNext();
+
+    await userController.getMe(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(StatusCodes.OK);
+    const payload = res.json.mock.calls[0][0];
+    expect(payload.data).toMatchObject({
+      id: 'user-1',
+      settings: {
+        partialPaymentEnabled: true,
+        partialPaymentMinAmount: '10.00',
+        partialPaymentMinRemaining: '20.00',
+      },
+    });
+  });
+
+  it('não expõe chaves sensíveis em settings', async () => {
+    vi.mocked(userService.findById).mockResolvedValueOnce({
+      id: 'user-1',
+      email: 'x@x.com',
+      role: 'CONSULTOR',
+    } as any);
+    vi.mocked(settingsService.getAll).mockResolvedValueOnce({
+      partial_payment_enabled: 'true',
+      payment_webhook_secret: 'super-secret-32-characters-long!',
+      payment_webhook_url: 'https://example.com/hook',
+    });
+
+    const req = makeReq('user-1');
+    const res = makeRes();
+    await userController.getMe(req, res, makeNext());
+
+    const settings = res.json.mock.calls[0][0].data.settings;
+    expect(settings.payment_webhook_secret).toBeUndefined();
+    expect(settings.paymentWebhookSecret).toBeUndefined();
+    expect(settings.payment_webhook_url).toBeUndefined();
+    expect(settings.paymentWebhookUrl).toBeUndefined();
+  });
+
+  it('retorna defaults seguros quando settings não estão configurados', async () => {
+    vi.mocked(userService.findById).mockResolvedValueOnce({
+      id: 'user-1',
+      email: 'x@x.com',
+      role: 'CONSULTOR',
+    } as any);
+    vi.mocked(settingsService.getAll).mockResolvedValueOnce({});
+
+    const req = makeReq('user-1');
+    const res = makeRes();
+    await userController.getMe(req, res, makeNext());
+
+    expect(res.json.mock.calls[0][0].data.settings).toEqual({
+      partialPaymentEnabled: false,
+      partialPaymentMinAmount: null,
+      partialPaymentMinRemaining: null,
+    });
+  });
+});
 
 describe('UserController.getSavedCards', () => {
   it('chama savedCardService.listByUser e retorna 200', async () => {

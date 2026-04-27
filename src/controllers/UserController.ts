@@ -2,18 +2,41 @@ import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import userService from '../services/UserService';
 import savedCardService from '../services/SavedCardService';
+import settingsService from '../services/SettingsService';
 import type { Prisma } from '../../generated/prisma/client';
+
+interface PublicSettings {
+  partialPaymentEnabled: boolean;
+  partialPaymentMinAmount: string | null;
+  partialPaymentMinRemaining: string | null;
+}
+
+function buildPublicSettings(raw: Record<string, string>): PublicSettings {
+  return {
+    partialPaymentEnabled: raw.partial_payment_enabled === 'true',
+    partialPaymentMinAmount: raw.partial_payment_min_amount ?? null,
+    partialPaymentMinRemaining: raw.partial_payment_min_remaining ?? null,
+  };
+}
 
 class UserController {
   /**
    * GET /api/users/me
-   * Retorna o perfil do usuário autenticado, incluindo dados de consultor se vinculado.
+   * Retorna o perfil do usuário autenticado e flags públicas do sistema.
    */
   async getMe(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const user = await userService.findById(req.user!.id);
+      const [user, rawSettings] = await Promise.all([
+        userService.findById(req.user!.id),
+        settingsService.getAll(),
+      ]);
 
-      res.status(StatusCodes.OK).json({ status: 'success', data: user });
+      const data = {
+        ...(user as Record<string, unknown>),
+        settings: buildPublicSettings(rawSettings),
+      };
+
+      res.status(StatusCodes.OK).json({ status: 'success', data });
     } catch (error) {
       next(error);
     }
