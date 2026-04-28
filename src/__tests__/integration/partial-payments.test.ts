@@ -63,6 +63,7 @@ describe('Partial Payments — integration', () => {
 
   beforeEach(async () => {
     await cleanDatabase();
+    await prisma.setting.deleteMany();
     webhookEvents.length = 0;
 
     // Usar ADMIN para evitar exigência de Consultant na hierarquia
@@ -77,7 +78,6 @@ describe('Partial Payments — integration', () => {
         { key: 'payment_webhook_url', value: `http://localhost:${webhookPort}/hook` },
         { key: 'payment_webhook_secret', value: 'test-secret-16chars!' },
       ],
-      skipDuplicates: true,
     });
   });
 
@@ -94,12 +94,17 @@ describe('Partial Payments — integration', () => {
     const { referenceNum } = createRes.body;
     expect(referenceNum).toBeDefined();
 
+    // Recupera o tid persistido (o mock do gateway gera novo TID a cada call,
+    // então precisamos usar o mesmo valor que foi salvo no banco).
+    const persisted = await prisma.payment.findUnique({ where: { id: createRes.body.paymentId } });
+    expect(persisted?.gatewayTransactionId).toBeTruthy();
+
     // Simular callback da eRede confirmando o pagamento
     const callbackRes = await api
       .post('/api/payments/callback/erede')
       .set({ 'x-erede-secret': process.env.EREDE_CALLBACK_SECRET || 'test-callback-secret' })
       .send({
-        tid: `tid-partial-${Date.now()}`,
+        tid: persisted!.gatewayTransactionId,
         returnCode: '00',
         status: 0,
         reference: referenceNum,
@@ -133,11 +138,12 @@ describe('Partial Payments — integration', () => {
 
     expect(create1.status).toBe(201);
     const ref1 = create1.body.referenceNum;
+    const persisted1 = await prisma.payment.findUnique({ where: { id: create1.body.paymentId } });
 
     await api
       .post('/api/payments/callback/erede')
       .set({ 'x-erede-secret': 'test-callback-secret' })
-      .send({ tid: `tid-seq1-${Date.now()}`, returnCode: '00', status: 0, reference: ref1, amount: 4000 });
+      .send({ tid: persisted1!.gatewayTransactionId, returnCode: '00', status: 0, reference: ref1, amount: 4000 });
 
     await new Promise((r) => setTimeout(r, 150));
 
@@ -149,11 +155,12 @@ describe('Partial Payments — integration', () => {
 
     expect(create2.status).toBe(201);
     const ref2 = create2.body.referenceNum;
+    const persisted2 = await prisma.payment.findUnique({ where: { id: create2.body.paymentId } });
 
     await api
       .post('/api/payments/callback/erede')
       .set({ 'x-erede-secret': 'test-callback-secret' })
-      .send({ tid: `tid-seq2-${Date.now()}`, returnCode: '00', status: 0, reference: ref2, amount: 6000 });
+      .send({ tid: persisted2!.gatewayTransactionId, returnCode: '00', status: 0, reference: ref2, amount: 6000 });
 
     await new Promise((r) => setTimeout(r, 150));
 

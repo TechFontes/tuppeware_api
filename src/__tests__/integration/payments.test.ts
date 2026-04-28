@@ -115,11 +115,12 @@ describe('GET /api/payments/:id (via paymentHistoryRoutes)', () => {
   });
 
   it('GET /api/payment-history/:id expõe nsu e authorizationCode quando presentes', async () => {
+    const isolatedDebt = await createDebt({ valor: 175, numeroNf: `NF-NSU-DETAIL-${Date.now()}` });
     // Cria um pagamento
     const createRes = await api
       .post('/api/payments')
       .set(authHeader(user.id, 'CONSULTOR', user.email))
-      .send({ debtIds: [debt1.id], method: 'PIX', billing: billingBase });
+      .send({ debtIds: [isolatedDebt.id], method: 'PIX', billing: billingBase });
 
     expect(createRes.status).toBe(201);
     const paymentId = createRes.body.data.id;
