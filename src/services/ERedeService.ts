@@ -50,51 +50,18 @@ class ERedeService {
    * Consulta o status de uma transação pelo TID.
    */
   async queryTransaction(tid: string): Promise<ERedeQueryResponse> {
-    this.validateConfig();
+    const url = `${eredeApiUrl}/${encodeURIComponent(tid)}`;
+    const json = await this._authedFetchJson(url, { method: 'GET' });
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-
-    try {
-      const response = await fetch(`${this.baseUrl}/${tid}`, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          Authorization: this.buildBasicAuth(),
-        },
-        signal: controller.signal,
-      });
-
-      const json = await response.json() as Record<string, unknown>;
-
-      if (!response.ok) {
-        const errMsg = (json.returnMessage as string) || 'Erro ao consultar transação na eRede.';
-        throw new AppError(errMsg, StatusCodes.BAD_GATEWAY);
-      }
-
-      return {
-        tid: String(json.tid ?? ''),
-        returnCode: String(json.returnCode ?? ''),
-        returnMessage: String(json.returnMessage ?? ''),
-        status: Number(json.status ?? -1),
-        amount: Number(json.amount ?? 0),
-        reference: String(json.reference ?? ''),
-        raw: json,
-      };
-    } catch (error) {
-      if (error instanceof AppError) throw error;
-
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new AppError('Timeout ao consultar transação na eRede.', StatusCodes.GATEWAY_TIMEOUT);
-      }
-
-      throw new AppError(
-        `Falha ao consultar transação na eRede: ${(error as Error).message}`,
-        StatusCodes.SERVICE_UNAVAILABLE,
-      );
-    } finally {
-      clearTimeout(timeout);
-    }
+    return {
+      tid: String(json.tid ?? ''),
+      returnCode: String(json.returnCode ?? ''),
+      returnMessage: String(json.returnMessage ?? ''),
+      status: Number(json.status ?? -1),
+      amount: Number(json.amount ?? 0),
+      reference: String(json.reference ?? ''),
+      raw: json,
+    };
   }
 
   /**

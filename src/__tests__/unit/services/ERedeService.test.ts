@@ -171,18 +171,26 @@ describe('ERedeService.tokenizeCard', () => {
 });
 
 describe('ERedeService.queryTransaction', () => {
+  beforeEach(() => {
+    process.env.EREDE_CLIENT_ID = 'test-client';
+    process.env.EREDE_CLIENT_SECRET = 'test-secret';
+    process.env.EREDE_OAUTH_URL = 'https://oauth.test/oauth2/token';
+    process.env.EREDE_API_URL = 'https://api.test/v2/transactions';
+  });
   afterEach(() => { vi.unstubAllGlobals(); });
 
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
   it('retorna dados da transação quando consulta bem-sucedida', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({
         tid: 'tid-123', returnCode: '00', returnMessage: 'OK',
         status: 0, amount: 15000, reference: 'TPW-ref-1',
-      }),
-    }));
-    const svc = await getService();
+      })));
 
+    const svc = await getService();
     const result = await svc.queryTransaction('tid-123');
 
     expect(result.tid).toBe('tid-123');
@@ -190,15 +198,36 @@ describe('ERedeService.queryTransaction', () => {
     expect(result.amount).toBe(15000);
   });
 
-  it('lança AppError quando consulta retorna status não-ok', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      json: async () => ({ returnMessage: 'TID não encontrado' }),
-    }));
-    const svc = await getService();
+  it('lança AppError quando consulta retorna 4xx', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({ returnMessage: 'TID não encontrado' }, 404)));
 
+    const svc = await getService();
     await expect(svc.queryTransaction('tid-invalido'))
-      .rejects.toMatchObject({ statusCode: 502 });
+      .rejects.toMatchObject({ message: expect.stringContaining('TID não encontrado') });
+  });
+
+  it('lança AppError 504 em timeout', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
+      const err = new Error('aborted');
+      err.name = 'AbortError';
+      return Promise.reject(err);
+    }));
+
+    const svc = await getService();
+    await expect(svc.queryTransaction('tid-timeout'))
+      .rejects.toMatchObject({ statusCode: 504 });
+  });
+
+  it('lança AppError 503 em erro genérico de rede', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockRejectedValueOnce(new Error('ECONNREFUSED')));
+
+    const svc = await getService();
+    await expect(svc.queryTransaction('tid-err'))
+      .rejects.toMatchObject({ statusCode: 503 });
   });
 });
 
@@ -234,30 +263,6 @@ describe('ERedeService.buildCreditPayload — campos adicionais', () => {
     }) as any;
 
     expect(payload.billing.address.country).toBe('BRA');
-  });
-});
-
-describe('ERedeService.queryTransaction — timeout e erro genérico', () => {
-  afterEach(() => { vi.unstubAllGlobals(); });
-
-  it('lança AppError 504 quando queryTransaction atinge timeout (AbortError)', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
-      const err = new Error('The operation was aborted');
-      err.name = 'AbortError';
-      return Promise.reject(err);
-    }));
-    const svc = await getService();
-
-    await expect(svc.queryTransaction('tid-timeout'))
-      .rejects.toMatchObject({ statusCode: 504 });
-  });
-
-  it('lança AppError 503 quando queryTransaction lança erro genérico de rede', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
-    const svc = await getService();
-
-    await expect(svc.queryTransaction('tid-err'))
-      .rejects.toMatchObject({ statusCode: 503 });
   });
 });
 
