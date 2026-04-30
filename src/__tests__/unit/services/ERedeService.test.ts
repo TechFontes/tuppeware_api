@@ -436,6 +436,29 @@ describe('ERedeService.tokenizeCardCofre', () => {
     const body = JSON.parse(fetchMock.mock.calls[1][1].body);
     expect(body.securityCode).toBe('123');
   });
+
+  it('lança AppError 502 quando resposta sem tokenizationId', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({ /* missing tokenizationId */ }, 201)));
+
+    const svc = await getService();
+    await expect(svc.tokenizeCardCofre(cardData))
+      .rejects.toMatchObject({
+        statusCode: 502,
+        message: expect.stringContaining('tokenizationId'),
+      });
+  });
+
+  it('lança AppError 502 quando tokenizationId é string vazia', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({ tokenizationId: '' }, 201)));
+
+    const svc = await getService();
+    await expect(svc.tokenizeCardCofre(cardData))
+      .rejects.toMatchObject({ statusCode: 502 });
+  });
 });
 
 describe('ERedeService.createTransaction', () => {

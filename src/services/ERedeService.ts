@@ -331,7 +331,15 @@ class ERedeService {
 
     const json = await this._authedFetchJson(url, { method: 'POST', body: JSON.stringify(body) });
 
-    return { tokenizationId: String(json.tokenizationId ?? '') };
+    const tokenizationId = json.tokenizationId;
+    if (typeof tokenizationId !== 'string' || tokenizationId.length === 0) {
+      throw new AppError(
+        'eRede não retornou tokenizationId na resposta de tokenização.',
+        StatusCodes.BAD_GATEWAY,
+      );
+    }
+
+    return { tokenizationId };
   }
 
   /**
