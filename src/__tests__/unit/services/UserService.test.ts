@@ -108,6 +108,46 @@ describe('UserService.update', () => {
     await expect(userService.update('nao-existe', { name: 'X' }))
       .rejects.toMatchObject({ statusCode: StatusCodes.NOT_FOUND });
   });
+
+  it('normaliza birthDate "YYYY-MM-DD" para Date antes de persistir', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser() as any);
+    vi.mocked(userRepository.update).mockResolvedValueOnce(makeUser() as any);
+
+    await userService.update('user-1', { birthDate: '2026-04-28' } as any);
+
+    const updateCall = vi.mocked(userRepository.update).mock.calls[0][1] as any;
+    expect(updateCall.birthDate).toBeInstanceOf(Date);
+    expect((updateCall.birthDate as Date).toISOString()).toBe('2026-04-28T00:00:00.000Z');
+  });
+
+  it('aceita birthDate em ISO completo sem alterar o valor', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser() as any);
+    vi.mocked(userRepository.update).mockResolvedValueOnce(makeUser() as any);
+
+    const iso = '2026-04-28T12:34:56.000Z';
+    await userService.update('user-1', { birthDate: iso } as any);
+
+    const updateCall = vi.mocked(userRepository.update).mock.calls[0][1] as any;
+    expect(updateCall.birthDate).toBeInstanceOf(Date);
+    expect((updateCall.birthDate as Date).toISOString()).toBe(iso);
+  });
+
+  it('lança 400 quando birthDate é inválido', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser() as any);
+
+    await expect(userService.update('user-1', { birthDate: 'data-invalida' } as any))
+      .rejects.toMatchObject({ statusCode: StatusCodes.BAD_REQUEST });
+  });
+
+  it('mantém birthDate=null quando explicitamente nulo', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser() as any);
+    vi.mocked(userRepository.update).mockResolvedValueOnce(makeUser() as any);
+
+    await userService.update('user-1', { birthDate: null } as any);
+
+    const updateCall = vi.mocked(userRepository.update).mock.calls[0][1] as any;
+    expect(updateCall.birthDate).toBeNull();
+  });
 });
 
 // -------------------------------------------------------------------- findAll

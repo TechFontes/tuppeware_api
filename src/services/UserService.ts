@@ -47,10 +47,43 @@ class UserService {
       throw new AppError('Usuário não encontrado.', StatusCodes.NOT_FOUND);
     }
 
-    const updated = await userRepository.update(id, data);
+    const normalized = this._normalizeUpdateData(data);
+
+    const updated = await userRepository.update(id, normalized);
     const { password: _, ...sanitized } = updated;
 
     return sanitized;
+  }
+
+  private _normalizeUpdateData(data: Prisma.UserUpdateInput): Prisma.UserUpdateInput {
+    if (!('birthDate' in data) || data.birthDate === undefined) {
+      return data;
+    }
+
+    const raw = data.birthDate;
+
+    if (raw === null || raw instanceof Date) {
+      return data;
+    }
+
+    if (typeof raw === 'string') {
+      const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(raw);
+      const parsed = new Date(dateOnly ? `${raw}T00:00:00.000Z` : raw);
+
+      if (Number.isNaN(parsed.getTime())) {
+        throw new AppError(
+          'birthDate inválido. Use o formato YYYY-MM-DD ou ISO-8601.',
+          StatusCodes.BAD_REQUEST,
+        );
+      }
+
+      return { ...data, birthDate: parsed };
+    }
+
+    throw new AppError(
+      'birthDate inválido. Use o formato YYYY-MM-DD ou ISO-8601.',
+      StatusCodes.BAD_REQUEST,
+    );
   }
 
   async findAll() {
