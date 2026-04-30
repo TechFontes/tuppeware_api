@@ -99,6 +99,50 @@ class SavedCardService {
 
     await savedCardRepository.delete(cardId);
   }
+
+  async assertActiveForCharge(userId: string, savedCardId: string): Promise<SavedCard> {
+    const card = await savedCardRepository.findActiveForUser(userId, savedCardId);
+
+    if (!card) {
+      throw new AppError('Cartão salvo não encontrado.', StatusCodes.NOT_FOUND);
+    }
+
+    if (card.status === 'ACTIVE') {
+      return card;
+    }
+
+    await this._syncCard(card);
+    const refreshed = await savedCardRepository.findById(savedCardId);
+
+    if (refreshed?.status !== 'ACTIVE') {
+      throw new AppError(
+        `Cartão não está ativo (status: ${refreshed?.status ?? 'desconhecido'}).`,
+        StatusCodes.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    return refreshed;
+  }
+
+  async syncFromWebhook(tokenizationId: string): Promise<void> {
+    const card = await savedCardRepository.findByTokenizationId(tokenizationId);
+    if (!card) { return; }
+
+    await this._syncCard(card);
+  }
+
+  private async _syncCard(card: SavedCard): Promise<void> {
+    const remote = await eRedeService.queryTokenization(card.tokenizationId);
+
+    await savedCardRepository.updateStatus(card.id, {
+      status: remote.status,
+      bin: remote.bin ?? null,
+      cardBrand: remote.brand ?? null,
+      lastFour: remote.last4 ?? card.lastFour,
+      brandTid: remote.brandTid ?? null,
+      lastSyncedAt: new Date(),
+    });
+  }
 }
 
 export type { SavedCardPublicView };

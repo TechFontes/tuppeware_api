@@ -173,3 +173,99 @@ describe('SavedCardService.deleteCard', () => {
       .rejects.toMatchObject({ statusCode: StatusCodes.FORBIDDEN });
   });
 });
+
+describe('SavedCardService.assertActiveForCharge', () => {
+  it('retorna o cartão quando já está ACTIVE', async () => {
+    vi.mocked(savedCardRepository.findActiveForUser).mockResolvedValueOnce(
+      makeCard({ status: 'ACTIVE' }) as any,
+    );
+
+    const result = await savedCardService.assertActiveForCharge('user-1', 'card-1');
+
+    expect(result.status).toBe('ACTIVE');
+    expect(eRedeService.queryTokenization).not.toHaveBeenCalled();
+  });
+
+  it('lança 404 quando cartão não pertence ao user', async () => {
+    vi.mocked(savedCardRepository.findActiveForUser).mockResolvedValueOnce(null);
+
+    await expect(savedCardService.assertActiveForCharge('user-1', 'card-1'))
+      .rejects.toMatchObject({ statusCode: StatusCodes.NOT_FOUND });
+  });
+
+  it('quando PENDING, faz sync e retorna ACTIVE se Rede confirmar', async () => {
+    vi.mocked(savedCardRepository.findActiveForUser).mockResolvedValueOnce(
+      makeCard({ status: 'PENDING' }) as any,
+    );
+    vi.mocked(eRedeService.queryTokenization).mockResolvedValueOnce({
+      tokenizationId: 'tok-uuid',
+      status: 'ACTIVE',
+      raw: {},
+    });
+    vi.mocked(savedCardRepository.updateStatus).mockResolvedValueOnce(
+      makeCard({ status: 'ACTIVE' }) as any,
+    );
+    vi.mocked(savedCardRepository.findById).mockResolvedValueOnce(
+      makeCard({ status: 'ACTIVE' }) as any,
+    );
+
+    const result = await savedCardService.assertActiveForCharge('user-1', 'card-1');
+
+    expect(result.status).toBe('ACTIVE');
+    expect(eRedeService.queryTokenization).toHaveBeenCalled();
+  });
+
+  it('lança 422 quando ainda não está ACTIVE após sync', async () => {
+    vi.mocked(savedCardRepository.findActiveForUser).mockResolvedValueOnce(
+      makeCard({ status: 'PENDING' }) as any,
+    );
+    vi.mocked(eRedeService.queryTokenization).mockResolvedValueOnce({
+      tokenizationId: 'tok-uuid',
+      status: 'INACTIVE',
+      raw: {},
+    });
+    vi.mocked(savedCardRepository.updateStatus).mockResolvedValueOnce(
+      makeCard({ status: 'INACTIVE' }) as any,
+    );
+    vi.mocked(savedCardRepository.findById).mockResolvedValueOnce(
+      makeCard({ status: 'INACTIVE' }) as any,
+    );
+
+    await expect(savedCardService.assertActiveForCharge('user-1', 'card-1'))
+      .rejects.toMatchObject({
+        statusCode: StatusCodes.UNPROCESSABLE_ENTITY,
+        message: expect.stringContaining('INACTIVE'),
+      });
+  });
+});
+
+describe('SavedCardService.syncFromWebhook', () => {
+  it('atualiza status quando cartão existe', async () => {
+    vi.mocked(savedCardRepository.findByTokenizationId).mockResolvedValueOnce(makeCard() as any);
+    vi.mocked(eRedeService.queryTokenization).mockResolvedValueOnce({
+      tokenizationId: 'tok-uuid',
+      status: 'ACTIVE',
+      bin: '544828',
+      brand: 'MASTERCARD',
+      brandTid: 'btid-1',
+      raw: {},
+    });
+    vi.mocked(savedCardRepository.updateStatus).mockResolvedValueOnce(makeCard() as any);
+
+    await savedCardService.syncFromWebhook('tok-uuid');
+
+    expect(savedCardRepository.updateStatus).toHaveBeenCalledWith(
+      'card-1',
+      expect.objectContaining({ status: 'ACTIVE', bin: '544828', cardBrand: 'MASTERCARD' }),
+    );
+  });
+
+  it('ignora silenciosamente quando cartão não encontrado (outro PV)', async () => {
+    vi.mocked(savedCardRepository.findByTokenizationId).mockResolvedValueOnce(null);
+
+    await savedCardService.syncFromWebhook('tok-de-outro-pv');
+
+    expect(eRedeService.queryTokenization).not.toHaveBeenCalled();
+    expect(savedCardRepository.updateStatus).not.toHaveBeenCalled();
+  });
+});
