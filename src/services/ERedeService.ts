@@ -110,7 +110,7 @@ class ERedeService {
         brand: String(json.brand ?? ''),
       };
     } catch (error) {
-      if (error instanceof AppError) throw error;
+      if (error instanceof AppError) {throw error;}
 
       if (error instanceof Error && error.name === 'AbortError') {
         throw new AppError('Timeout ao tokenizar cartão na eRede.', StatusCodes.GATEWAY_TIMEOUT);
@@ -155,9 +155,9 @@ class ERedeService {
     }
 
     if (webhookStatus !== undefined) {
-      if (webhookStatus === 0) return 'PAGO';
-      if (webhookStatus === 3) return 'PENDENTE';
-      if (webhookStatus === 4) return 'CANCELADO';
+      if (webhookStatus === 0) {return 'PAGO';}
+      if (webhookStatus === 3) {return 'PENDENTE';}
+      if (webhookStatus === 4) {return 'CANCELADO';}
     }
 
     return 'CANCELADO';
@@ -205,17 +205,13 @@ class ERedeService {
     };
     cardToken?: string;
   }): ERedeCreditRequest {
-    const cardField = params.cardToken
-      ? { cardToken: params.cardToken }
-      : { cardNumber: params.card.number };
-
-    return {
+    const base: ERedeCreditRequest = {
       kind: 'credit',
       reference: params.reference,
       amount: params.amountCents,
       installments: params.installments,
       cardHolderName: params.card.holderName,
-      ...cardField,
+      cardNumber: params.card.number,
       expirationMonth: params.card.expMonth,
       expirationYear: params.card.expYear,
       securityCode: params.card.cvv,
@@ -237,6 +233,13 @@ class ERedeService {
         },
       },
     };
+
+    if (params.cardToken) {
+      const { cardNumber: _cn, cardHolderName: _ch, expirationMonth: _em, expirationYear: _ey, ...rest } = base;
+      return { ...rest, cardToken: params.cardToken } as ERedeCreditRequest;
+    }
+
+    return base;
   }
 
   /**
@@ -321,7 +324,7 @@ class ERedeService {
   ): Promise<{ returnCode: string; returnMessage: string }> {
     const url = `${eredeTokenServiceUrl}/tokenization/${encodeURIComponent(tokenizationId)}/management`;
     const body: Record<string, unknown> = { action };
-    if (reason !== undefined) body.reason = reason;
+    if (reason !== undefined) {body.reason = reason;}
 
     const json = await this._authedFetchJson(url, { method: 'POST', body: JSON.stringify(body) });
 
@@ -443,10 +446,10 @@ class ERedeService {
       transactionLinkId: json.transactionLinkId ? String(json.transactionLinkId) : undefined,
       pix: pixData
         ? {
-            qrCode: String(pixData.qrCode ?? ''),
-            link: String(pixData.link ?? ''),
-            expirationDate: String(pixData.expirationDate ?? ''),
-          }
+          qrCode: String(pixData.qrCode ?? ''),
+          link: String(pixData.link ?? ''),
+          expirationDate: String(pixData.expirationDate ?? ''),
+        }
         : undefined,
       raw: json,
     };

@@ -117,11 +117,11 @@ export interface ERedeCreditRequest {
   reference: string;
   amount: number; // centavos
   installments: number;
-  cardHolderName: string;
+  cardHolderName?: string;
   cardNumber?: string;
   cardToken?: string;
-  expirationMonth: string;
-  expirationYear: string;
+  expirationMonth?: string;
+  expirationYear?: string;
   securityCode: string;
   capture: true;
   softDescriptor: string;

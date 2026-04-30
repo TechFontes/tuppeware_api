@@ -623,6 +623,44 @@ describe('ERedeService.queryTokenization', () => {
   });
 });
 
+describe('ERedeService.buildCreditPayload — Cofre completo', () => {
+  it('omite cardNumber, cardHolderName, expirationMonth e expirationYear quando cardToken presente', async () => {
+    const svc = await getService();
+    const payload = svc.buildCreditPayload({
+      reference: 'TPW-cofre',
+      amountCents: 10000,
+      installments: 1,
+      card: { number: 'IGNORE', expMonth: 'IGNORE', expYear: 'IGNORE', cvv: '123', holderName: 'IGNORE' },
+      billing: { name: 'T', document: '111', email: 't@t.com', address: 'R', district: 'D', city: 'C', state: 'SP', postalcode: '00000' },
+      cardToken: 'tok-cofre-123',
+    }) as any;
+
+    expect(payload.cardToken).toBe('tok-cofre-123');
+    expect(payload.cardNumber).toBeUndefined();
+    expect(payload.cardHolderName).toBeUndefined();
+    expect(payload.expirationMonth).toBeUndefined();
+    expect(payload.expirationYear).toBeUndefined();
+    expect(payload.securityCode).toBe('123'); // CVV mantido
+  });
+
+  it('mantém cardNumber, cardHolderName, expirationMonth e expirationYear quando sem cardToken', async () => {
+    const svc = await getService();
+    const payload = svc.buildCreditPayload({
+      reference: 'TPW-direto',
+      amountCents: 10000,
+      installments: 1,
+      card: { number: '4111111111111111', expMonth: '12', expYear: '2028', cvv: '123', holderName: 'TESTE' },
+      billing: { name: 'T', document: '111', email: 't@t.com', address: 'R', district: 'D', city: 'C', state: 'SP', postalcode: '00000' },
+    }) as any;
+
+    expect(payload.cardNumber).toBe('4111111111111111');
+    expect(payload.cardHolderName).toBe('TESTE');
+    expect(payload.expirationMonth).toBe('12');
+    expect(payload.expirationYear).toBe('2028');
+    expect(payload.cardToken).toBeUndefined();
+  });
+});
+
 describe('ERedeService.manageTokenization', () => {
   beforeEach(() => {
     process.env.EREDE_CLIENT_ID = 'test-client';
