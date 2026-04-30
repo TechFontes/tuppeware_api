@@ -343,6 +343,43 @@ class ERedeService {
   }
 
   /**
+   * Consulta o estado de uma tokenização no Cofre.
+   */
+  async queryTokenization(tokenizationId: string): Promise<{
+    tokenizationId: string;
+    status: 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'FAILED';
+    bin?: string;
+    last4?: string;
+    brand?: string;
+    brandTid?: string;
+    lastModifiedDate?: string;
+    raw: Record<string, unknown>;
+  }> {
+    const url = `${eredeTokenServiceUrl}/tokenization/${encodeURIComponent(tokenizationId)}`;
+    const json = await this._authedFetchJson(url, { method: 'GET' });
+
+    return {
+      tokenizationId: String(json.tokenizationId ?? tokenizationId),
+      status: this._mapTokenizationStatus(String(json.tokenizationStatus ?? '')),
+      bin: json.bin ? String(json.bin) : undefined,
+      last4: json.last4digits ? String(json.last4digits) : undefined,
+      brand: json.brand ? String(json.brand) : undefined,
+      brandTid: json.brandTid ? String(json.brandTid) : undefined,
+      lastModifiedDate: json.lastModifiedDate ? String(json.lastModifiedDate) : undefined,
+      raw: json,
+    };
+  }
+
+  private _mapTokenizationStatus(remote: string): 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'FAILED' {
+    const normalized = remote.toLowerCase();
+    if (normalized === 'active') { return 'ACTIVE'; }
+    if (normalized === 'pending') { return 'PENDING'; }
+    if (normalized === 'inactive' || normalized === 'suspended') { return 'INACTIVE'; }
+    if (normalized === 'failed') { return 'FAILED'; }
+    return 'PENDING';
+  }
+
+  /**
    * Helper privado: faz fetch autenticado com retry em 401, content-type guard
    * e tradução de erros pra AppError.
    */

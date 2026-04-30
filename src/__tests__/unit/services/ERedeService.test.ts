@@ -508,3 +508,83 @@ describe('ERedeService.createTransaction', () => {
       .rejects.toMatchObject({ statusCode: 500 });
   });
 });
+
+describe('ERedeService.queryTokenization', () => {
+  beforeEach(() => {
+    process.env.EREDE_CLIENT_ID = 'test-client';
+    process.env.EREDE_CLIENT_SECRET = 'test-secret';
+    process.env.EREDE_OAUTH_URL = 'https://oauth.test/oauth2/token';
+    process.env.EREDE_TOKEN_SERVICE_URL = 'https://api.test/token-service/oauth/v2';
+  });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+  it('faz GET /tokenization/{id} e mapeia status', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({
+        tokenizationId: 'tok-uuid',
+        tokenizationStatus: 'Active',
+        bin: '544828',
+        last4digits: '0007',
+        brand: 'MASTERCARD',
+        brandTid: 'btid-1',
+        lastModifiedDate: '2026-04-30T12:00:00Z',
+      })));
+
+    const svc = await getService();
+    const result = await svc.queryTokenization('tok-uuid');
+
+    expect(result.tokenizationId).toBe('tok-uuid');
+    expect(result.status).toBe('ACTIVE');
+    expect(result.bin).toBe('544828');
+    expect(result.last4).toBe('0007');
+    expect(result.brand).toBe('MASTERCARD');
+    expect(result.brandTid).toBe('btid-1');
+  });
+
+  it('mapeia "Suspended" para INACTIVE', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({ tokenizationId: 'x', tokenizationStatus: 'Suspended' })));
+
+    const svc = await getService();
+    const result = await svc.queryTokenization('x');
+
+    expect(result.status).toBe('INACTIVE');
+  });
+
+  it('mapeia "Pending" para PENDING', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({ tokenizationId: 'x', tokenizationStatus: 'Pending' })));
+
+    const svc = await getService();
+    const result = await svc.queryTokenization('x');
+
+    expect(result.status).toBe('PENDING');
+  });
+
+  it('mapeia "Failed" para FAILED', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({ tokenizationId: 'x', tokenizationStatus: 'Failed' })));
+
+    const svc = await getService();
+    const result = await svc.queryTokenization('x');
+
+    expect(result.status).toBe('FAILED');
+  });
+
+  it('lança AppError quando 404', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({ returnMessage: 'Tokenization not found' }, 404)));
+
+    const svc = await getService();
+    await expect(svc.queryTokenization('nope'))
+      .rejects.toMatchObject({ statusCode: 400 });
+  });
+});
