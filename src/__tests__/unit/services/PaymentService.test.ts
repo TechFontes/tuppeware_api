@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 
 vi.mock('../../../repositories/PaymentRepository', () => ({
@@ -34,7 +34,7 @@ vi.mock('../../../services/WebSocketService', () => ({
 }));
 
 vi.mock('../../../services/SavedCardService', () => ({
-  default: { tokenizeAndSave: vi.fn() },
+  default: { tokenizeAndSave: vi.fn(), assertActiveForCharge: vi.fn() },
 }));
 
 vi.mock('../../../repositories/SettingsRepository', () => ({
@@ -58,7 +58,7 @@ import paymentRepository from '../../../repositories/PaymentRepository';
 import debtRepository from '../../../repositories/DebtRepository';
 import eRedeService from '../../../services/ERedeService';
 import webSocketService from '../../../services/WebSocketService';
-import savedCardRepository from '../../../repositories/SavedCardRepository';
+import savedCardService from '../../../services/SavedCardService';
 import settingsRepository from '../../../repositories/SettingsRepository';
 import userRepository from '../../../repositories/UserRepository';
 import debtService from '../../../services/DebtService';
@@ -634,8 +634,8 @@ describe('PaymentService.create — parcelamento baseado no subtotal (CRIT-04)',
 
 describe('PaymentService.create — pagamento com savedCardId (RF-29)', () => {
   const savedCard = {
-    id: 'saved-card-1', userId: 'user-uuid-1', token: 'tok_saved_abc',
-    cardBrand: 'VISA', lastFour: '4242', holderName: 'SAVED USER',
+    id: 'saved-card-1', userId: 'user-uuid-1', tokenizationId: 'tok_saved_abc',
+    cardBrand: 'VISA', lastFour: '4242', holderName: 'SAVED USER', status: 'ACTIVE',
     createdAt: new Date(), updatedAt: new Date(),
   };
 
@@ -644,10 +644,15 @@ describe('PaymentService.create — pagamento com savedCardId (RF-29)', () => {
     vi.mocked(eRedeService.buildCreditPayload).mockReturnValue({ kind: 'credit' } as any);
     vi.mocked(eRedeService.mapStatusToLocal).mockReturnValue('PAGO');
     vi.mocked(paymentRepository.create).mockResolvedValue(makePayment('p1', 'PAGO', 'CARTAO_CREDITO') as any);
+    vi.mocked(paymentRepository.update).mockResolvedValue({ id: 'p1' } as any);
   });
 
-  it('cria pagamento usando token do cartão salvo', async () => {
-    vi.mocked(savedCardRepository.findById).mockResolvedValueOnce(savedCard as any);
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('cria pagamento usando tokenizationId do cartão salvo', async () => {
+    vi.mocked(savedCardService.assertActiveForCharge).mockResolvedValueOnce(savedCard as any);
 
     await paymentService.create('user-uuid-1', {
       debtIds: ['d1'],
@@ -663,8 +668,10 @@ describe('PaymentService.create — pagamento com savedCardId (RF-29)', () => {
     );
   });
 
-  it('lança 404 quando savedCardId não existe', async () => {
-    vi.mocked(savedCardRepository.findById).mockResolvedValueOnce(null);
+  it('lança 404 quando savedCardId não existe (assertActiveForCharge propaga)', async () => {
+    vi.mocked(savedCardService.assertActiveForCharge).mockRejectedValueOnce(
+      Object.assign(new Error('Cartão salvo não encontrado.'), { statusCode: 404 }),
+    );
 
     await expect(paymentService.create('user-uuid-1', {
       debtIds: ['d1'],
@@ -676,9 +683,9 @@ describe('PaymentService.create — pagamento com savedCardId (RF-29)', () => {
     })).rejects.toMatchObject({ statusCode: 404 });
   });
 
-  it('lança 403 quando cartão salvo pertence a outro usuário', async () => {
-    vi.mocked(savedCardRepository.findById).mockResolvedValueOnce(
-      { ...savedCard, userId: 'outro-user' } as any,
+  it('lança 403 quando cartão salvo pertence a outro usuário (assertActiveForCharge propaga)', async () => {
+    vi.mocked(savedCardService.assertActiveForCharge).mockRejectedValueOnce(
+      Object.assign(new Error('Acesso negado ao cartão salvo.'), { statusCode: 403 }),
     );
 
     await expect(paymentService.create('user-uuid-1', {
@@ -692,7 +699,7 @@ describe('PaymentService.create — pagamento com savedCardId (RF-29)', () => {
   });
 
   it('lança 400 quando savedCardId presente mas cvv ausente', async () => {
-    vi.mocked(savedCardRepository.findById).mockResolvedValueOnce(savedCard as any);
+    vi.mocked(savedCardService.assertActiveForCharge).mockResolvedValueOnce(savedCard as any);
 
     await expect(paymentService.create('user-uuid-1', {
       debtIds: ['d1'],
@@ -704,7 +711,7 @@ describe('PaymentService.create — pagamento com savedCardId (RF-29)', () => {
   });
 
   it('usa holderName do cartão salvo no payload', async () => {
-    vi.mocked(savedCardRepository.findById).mockResolvedValueOnce(savedCard as any);
+    vi.mocked(savedCardService.assertActiveForCharge).mockResolvedValueOnce(savedCard as any);
 
     await paymentService.create('user-uuid-1', {
       debtIds: ['d1'],
@@ -1181,5 +1188,84 @@ describe('PaymentService — exposição de nsu e authorizationCode nas resposta
     expect(result.nsu).toBeNull();
     expect(result).toHaveProperty('authorizationCode');
     expect(result.authorizationCode).toBeNull();
+  });
+});
+
+describe('PaymentService.create — savedCardId (Cofre)', () => {
+  it('chama assertActiveForCharge e usa tokenizationId como cardToken', async () => {
+    const debt = makeDebt('d1', 'PENDENTE', 1000);
+    vi.mocked(debtRepository.findByIds).mockResolvedValueOnce([debt] as any);
+    vi.mocked(savedCardService.assertActiveForCharge).mockResolvedValueOnce({
+      id: 'card-1', userId: 'user-1', tokenizationId: 'tok-cofre', status: 'ACTIVE', holderName: 'X',
+    } as any);
+    vi.mocked(eRedeService.createTransaction).mockResolvedValueOnce({
+      tid: 'tid-1', returnCode: '00', returnMessage: 'OK', reference: 'TPW-x',
+      cardBin: '544828', brandTid: 'btid-1', transactionLinkId: 'link-1', raw: {},
+    } as any);
+    vi.mocked(eRedeService.mapStatusToLocal).mockReturnValueOnce('PAGO');
+    vi.mocked(paymentRepository.create).mockResolvedValueOnce({ id: 'p1', userId: 'user-1' } as any);
+    vi.mocked(paymentRepository.update).mockResolvedValueOnce({ id: 'p1' } as any);
+
+    await paymentService.create('user-1', {
+      debtIds: ['d1'],
+      method: 'CARTAO_CREDITO',
+      installments: 1,
+      savedCardId: 'card-1',
+      card: { number: '', expMonth: '12', expYear: '2030', cvv: '123', holderName: 'X' },
+      billing: { name: 'X', email: 'x@x.com', phone: '11', document: '111', birthDate: '2000-01-01', address: 'R', district: 'D', city: 'C', state: 'SP', postalcode: '00000' },
+    });
+
+    expect(savedCardService.assertActiveForCharge).toHaveBeenCalledWith('user-1', 'card-1');
+    const buildCall = vi.mocked(eRedeService.buildCreditPayload).mock.calls[0][0];
+    expect(buildCall.cardToken).toBe('tok-cofre');
+  });
+
+  it('persiste savedCardId, cardBin, brandTid, transactionLinkId no payment', async () => {
+    const debt = makeDebt('d1', 'PENDENTE', 1000);
+    vi.mocked(debtRepository.findByIds).mockResolvedValueOnce([debt] as any);
+    vi.mocked(savedCardService.assertActiveForCharge).mockResolvedValueOnce({
+      id: 'card-1', tokenizationId: 'tok-cofre', status: 'ACTIVE', holderName: 'X',
+    } as any);
+    vi.mocked(eRedeService.createTransaction).mockResolvedValueOnce({
+      tid: 'tid-1', returnCode: '00', returnMessage: 'OK', reference: 'TPW-x',
+      cardBin: '544828', brandTid: 'btid-1', transactionLinkId: 'link-1', raw: {},
+    } as any);
+    vi.mocked(eRedeService.mapStatusToLocal).mockReturnValueOnce('PAGO');
+    vi.mocked(paymentRepository.create).mockResolvedValueOnce({ id: 'p1', userId: 'user-1' } as any);
+    vi.mocked(paymentRepository.update).mockResolvedValueOnce({ id: 'p1' } as any);
+
+    await paymentService.create('user-1', {
+      debtIds: ['d1'],
+      method: 'CARTAO_CREDITO',
+      installments: 1,
+      savedCardId: 'card-1',
+      card: { number: '', expMonth: '12', expYear: '2030', cvv: '123', holderName: 'X' },
+      billing: { name: 'X', email: 'x@x.com', phone: '11', document: '111', birthDate: '2000-01-01', address: 'R', district: 'D', city: 'C', state: 'SP', postalcode: '00000' },
+    });
+
+    expect(paymentRepository.update).toHaveBeenCalledWith('p1', expect.objectContaining({
+      cardBin: '544828',
+      brandTid: 'btid-1',
+      transactionLinkId: 'link-1',
+    }));
+  });
+
+  it('propaga 422 quando assertActiveForCharge falha', async () => {
+    const debt = makeDebt('d1', 'PENDENTE', 1000);
+    vi.mocked(debtRepository.findByIds).mockResolvedValueOnce([debt] as any);
+    vi.mocked(savedCardService.assertActiveForCharge).mockRejectedValueOnce(
+      Object.assign(new Error('Cartão não está ativo'), { statusCode: 422 }),
+    );
+
+    await expect(
+      paymentService.create('user-1', {
+        debtIds: ['d1'],
+        method: 'CARTAO_CREDITO',
+        installments: 1,
+        savedCardId: 'card-1',
+        card: { number: '', expMonth: '12', expYear: '2030', cvv: '123', holderName: 'X' },
+        billing: { name: 'X', email: 'x@x.com', phone: '11', document: '111', birthDate: '2000-01-01', address: 'R', district: 'D', city: 'C', state: 'SP', postalcode: '00000' },
+      }),
+    ).rejects.toMatchObject({ statusCode: 422 });
   });
 });

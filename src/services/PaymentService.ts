@@ -6,7 +6,6 @@ import debtRepository from '../repositories/DebtRepository';
 import eRedeService from './ERedeService';
 import webSocketService from './WebSocketService';
 import savedCardService from './SavedCardService';
-import savedCardRepository from '../repositories/SavedCardRepository';
 import settingsRepository from '../repositories/SettingsRepository';
 import userRepository from '../repositories/UserRepository';
 import debtService from './DebtService';
@@ -145,17 +144,11 @@ class PaymentService {
     // Resolve cartão salvo se savedCardId fornecido
     let cardToken: string | undefined;
     if (method === 'CARTAO_CREDITO' && savedCardId) {
-      const savedCard = await savedCardRepository.findById(savedCardId);
-      if (!savedCard) {
-        throw new AppError('Cartão salvo não encontrado.', StatusCodes.NOT_FOUND);
-      }
-      if (savedCard.userId !== userId) {
-        throw new AppError('Acesso negado ao cartão salvo.', StatusCodes.FORBIDDEN);
-      }
+      const savedCard = await savedCardService.assertActiveForCharge(userId, savedCardId);
       if (!card?.cvv) {
         throw new AppError('CVV é obrigatório ao pagar com cartão salvo.', StatusCodes.BAD_REQUEST);
       }
-      cardToken = savedCard.token;
+      cardToken = savedCard.tokenizationId;
       card = {
         number: '',
         expMonth: card?.expMonth || '',
@@ -208,6 +201,18 @@ class PaymentService {
       authorizationCode: gatewayResponse.authorizationCode ?? null,
       debtIds,
     });
+
+    // Persiste campos novos da Rede v2 (e link com saved_card)
+    if (method === 'CARTAO_CREDITO' && (
+      gatewayResponse.cardBin || gatewayResponse.brandTid || gatewayResponse.transactionLinkId || savedCardId
+    )) {
+      await paymentRepository.update(payment.id, {
+        cardBin: gatewayResponse.cardBin ?? null,
+        brandTid: gatewayResponse.brandTid ?? null,
+        transactionLinkId: gatewayResponse.transactionLinkId ?? null,
+        ...(savedCardId ? { savedCard: { connect: { id: savedCardId } } } : {}),
+      });
+    }
 
     // Atualiza débitos se pagamento aprovado imediatamente
     if (initialStatus === 'PAGO') {
