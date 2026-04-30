@@ -15,6 +15,7 @@ export {
   DebtStatus,
   PaymentMethod,
   PaymentStatus,
+  SavedCardStatus,
 } from '../../generated/prisma/client';
 
 // DTOs
