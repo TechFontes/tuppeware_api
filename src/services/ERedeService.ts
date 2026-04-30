@@ -38,47 +38,12 @@ class ERedeService {
    * Cria uma transação na eRede (PIX ou cartão de crédito).
    */
   async createTransaction(payload: ERedeTransactionRequest): Promise<ERedeTransactionResponse> {
-    this.validateConfig();
+    const json = await this._authedFetchJson(eredeApiUrl, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-
-    try {
-      const response = await fetch(this.baseUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          Authorization: this.buildBasicAuth(),
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
-
-      const json = await response.json() as Record<string, unknown>;
-
-      if (!response.ok) {
-        const errMsg = (json.returnMessage as string)
-          || (json.message as string)
-          || 'Erro ao processar transação na eRede.';
-        throw new AppError(errMsg, StatusCodes.BAD_GATEWAY);
-      }
-
-      return this.parseResponse(json);
-    } catch (error) {
-      if (error instanceof AppError) throw error;
-
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new AppError('Timeout ao conectar com a eRede.', StatusCodes.GATEWAY_TIMEOUT);
-      }
-
-      throw new AppError(
-        `Falha ao conectar com a eRede: ${(error as Error).message}`,
-        StatusCodes.SERVICE_UNAVAILABLE,
-      );
-    } finally {
-      clearTimeout(timeout);
-    }
+    return this.parseResponse(json);
   }
 
   /**
@@ -506,6 +471,9 @@ class ERedeService {
       nsu: json.nsu ? String(json.nsu) : undefined,
       authorizationCode: json.authorizationCode ? String(json.authorizationCode) : undefined,
       dateTime: json.dateTime ? String(json.dateTime) : undefined,
+      cardBin: json.cardBin ? String(json.cardBin) : undefined,
+      brandTid: json.brandTid ? String(json.brandTid) : undefined,
+      transactionLinkId: json.transactionLinkId ? String(json.transactionLinkId) : undefined,
       pix: pixData
         ? {
             qrCode: String(pixData.qrCode ?? ''),

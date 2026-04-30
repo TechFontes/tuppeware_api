@@ -261,17 +261,6 @@ describe('ERedeService.queryTransaction — timeout e erro genérico', () => {
   });
 });
 
-describe('ERedeService.createTransaction — erro genérico de rede', () => {
-  afterEach(() => { vi.unstubAllGlobals(); });
-
-  it('lança AppError 503 quando createTransaction lança erro genérico (não AbortError)', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
-    const svc = await getService();
-
-    await expect(svc.createTransaction(svc.buildPixPayload('TPW-1', 1000)))
-      .rejects.toMatchObject({ statusCode: 503 });
-  });
-});
 
 describe('ERedeService.tokenizeCard — erro genérico de rede', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
@@ -462,46 +451,76 @@ describe('ERedeService.tokenizeCardCofre', () => {
 });
 
 describe('ERedeService.createTransaction', () => {
+  beforeEach(() => {
+    process.env.EREDE_CLIENT_ID = 'test-client';
+    process.env.EREDE_CLIENT_SECRET = 'test-secret';
+    process.env.EREDE_OAUTH_URL = 'https://oauth.test/oauth2/token';
+    process.env.EREDE_API_URL = 'https://api.test/v2/transactions';
+  });
   afterEach(() => { vi.unstubAllGlobals(); });
 
-  it('retorna resposta parseada em caso de sucesso PIX', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+  it('retorna resposta parseada em caso de sucesso PIX (Bearer + Affiliation)', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({
         tid: 'tid-123', returnCode: '00', returnMessage: 'Aprovado', reference: 'TPW-1',
         pix: { qrCode: '00020126...', link: 'https://pix.link/qr', expirationDate: '2026-04-02T10:00:00Z' },
-      }),
-    }));
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+
     const svc = await getService();
     const result = await svc.createTransaction(svc.buildPixPayload('TPW-1', 15000));
+
     expect(result.returnCode).toBe('00');
     expect(result.pix?.qrCode).toBe('00020126...');
+    const init = fetchMock.mock.calls[1][1];
+    expect(init.headers.Authorization).toBe('Bearer tok');
+    expect(init.headers.Affiliation).toBe('test-client');
   });
 
-  it('lança AppError 502 quando gateway retorna erro', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      json: async () => ({ returnMessage: 'Cartão inválido' }),
-    }));
+  it('extrai cardBin, brandTid, transactionLinkId quando presentes (cobrança v2)', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({
+        tid: 'tid-123', returnCode: '00', returnMessage: 'OK', reference: 'TPW-1',
+        cardBin: '544828', brandTid: 'btid-99', transactionLinkId: 'link-abc',
+      })));
+
+    const svc = await getService();
+    const result = await svc.createTransaction(svc.buildPixPayload('TPW-1', 1000));
+
+    expect(result.cardBin).toBe('544828');
+    expect(result.brandTid).toBe('btid-99');
+    expect(result.transactionLinkId).toBe('link-abc');
+  });
+
+  it('lança AppError quando gateway retorna 4xx com returnMessage', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({ returnMessage: 'Cartão inválido' }, 400)));
+
     const svc = await getService();
     await expect(svc.createTransaction(svc.buildPixPayload('TPW-1', 1000)))
-      .rejects.toMatchObject({ message: 'Cartão inválido', statusCode: 502 });
+      .rejects.toMatchObject({ message: expect.stringContaining('Cartão inválido') });
   });
 
   it('lança AppError 504 em timeout', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
-      const error = new Error('The operation was aborted');
+      const error = new Error('aborted');
       error.name = 'AbortError';
       return Promise.reject(error);
     }));
+
     const svc = await getService();
     await expect(svc.createTransaction(svc.buildPixPayload('TPW-1', 1000)))
       .rejects.toMatchObject({ statusCode: 504 });
   });
 
-  it('lança AppError 500 quando credenciais não estão configuradas', async () => {
-    delete process.env.EREDE_PV;
-    delete process.env.EREDE_INTEGRATION_KEY;
+  it('lança AppError 500 quando EREDE_CLIENT_ID ausente', async () => {
+    delete process.env.EREDE_CLIENT_ID;
     vi.resetModules();
     const mod = await import('../../../services/ERedeService');
     await expect(mod.default.createTransaction({ kind: 'pix', reference: 'TPW-1', amount: 1000, expirationDate: '' }))

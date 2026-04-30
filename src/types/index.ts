@@ -144,6 +144,9 @@ export interface ERedeTransactionResponse {
   nsu?: string;
   authorizationCode?: string;
   dateTime?: string;
+  cardBin?: string;
+  brandTid?: string;
+  transactionLinkId?: string;
   pix?: ERedePixData;
   raw: Record<string, unknown>;
 }
