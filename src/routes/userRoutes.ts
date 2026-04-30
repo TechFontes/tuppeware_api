@@ -161,11 +161,36 @@ router.put(
  *                 type: string
  *                 example: 'JOAO DA SILVA'
  *                 description: Nome do titular
+ *               securityCode:
+ *                 type: string
+ *                 example: '123'
+ *                 description: CVV opcional — se enviado, valida no momento da tokenização
  *     responses:
  *       201:
- *         description: Cartão tokenizado e salvo
+ *         description: |
+ *           Cartão tokenizado e salvo (Cofre eRede). O `tokenizationId` opaco
+ *           NUNCA é retornado ao frontend. Status pode ser PENDING (sync via
+ *           webhook) ou ACTIVE (sync imediato funcionou).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: 'success' }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string }
+ *                     status: { type: string, enum: [PENDING, ACTIVE, INACTIVE, FAILED] }
+ *                     cardBrand: { type: string, nullable: true }
+ *                     lastFour: { type: string }
+ *                     holderName: { type: string }
+ *                     bin: { type: string, nullable: true }
+ *                     createdAt: { type: string, format: date-time }
  *       400:
  *         description: Dados inválidos
+ *       422:
+ *         description: Tokenização recusada pela eRede (cartão inválido)
  *       502:
  *         description: Falha na comunicação com a eRede
  */

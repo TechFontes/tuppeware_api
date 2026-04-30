@@ -113,11 +113,12 @@ class UserController {
    */
   async createSavedCard(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { cardNumber, expMonth, expYear, holderName } = req.body as {
+      const { cardNumber, expMonth, expYear, holderName, securityCode } = req.body as {
         cardNumber: string;
         expMonth: string;
         expYear: string;
         holderName: string;
+        securityCode?: string;
       };
 
       const card = await savedCardService.tokenizeAndSave({
@@ -127,6 +128,7 @@ class UserController {
         expMonth,
         expYear,
         holderName,
+        securityCode,
       });
 
       res.status(StatusCodes.CREATED).json({ status: 'success', data: card });

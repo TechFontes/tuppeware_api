@@ -4,15 +4,19 @@
 
 | Variável de ambiente | Descrição |
 |---|---|
-| `EREDE_PV` | Número do estabelecimento (PV) |
-| `EREDE_INTEGRATION_KEY` | Chave de integração |
-| `EREDE_API_URL` | URL base da API (ex: `https://api.userede.com.br/erede/v1/transactions`) |
-| `EREDE_CALLBACK_SECRET` | Secret opcional para validação de callbacks |
-| `EREDE_PIX_EXPIRATION_HOURS` | Horas de expiração do QR Code PIX |
-| `EREDE_SOFT_DESCRIPTOR` | Texto que aparece na fatura do cartão |
-| `EREDE_TIMEOUT_MS` | Timeout de requisições em ms |
+| `EREDE_CLIENT_ID` | OAuth 2.0 client (também header Affiliation) |
+| `EREDE_CLIENT_SECRET` | OAuth 2.0 client secret |
+| `EREDE_OAUTH_URL` | URL do endpoint /oauth2/token |
+| `EREDE_TOKEN_SERVICE_URL` | URL base do Cofre (/token-service/oauth/v2) |
+| `EREDE_API_URL` | URL base v2 (ex: `https://api.userede.com.br/erede/v2/transactions`) |
+| `EREDE_CALLBACK_SECRET` | Opcional. Valida header X-Erede-Secret no webhook |
+| `EREDE_TIMEOUT_MS` | Timeout em ms (default 15000) |
+| `EREDE_PIX_EXPIRATION_HOURS` | Expiração de QR PIX (default 24h) |
+| `EREDE_SOFT_DESCRIPTOR` | Texto na fatura do cliente |
 
-**Autenticação:** Basic Auth com `Base64(PV:INTEGRATION_KEY)` no header `Authorization`.
+**Autenticação:** OAuth 2.0 Bearer token (`client_credentials`) + header `Affiliation: {EREDE_CLIENT_ID}`.
+
+O `EredeOAuthClient` obtém e renova o token automaticamente (singleton com cache interno). As chamadas ao `/token-service/oauth/v2` (Cofre) usam o mesmo Bearer obtido via `EREDE_OAUTH_URL`.
 
 ---
 
@@ -20,9 +24,12 @@
 
 | Método | Path | Descrição |
 |---|---|---|
-| `POST` | `/transactions` | Criar transação (PIX ou cartão) |
-| `GET` | `/transactions/{tid}` | Consultar status de transação |
-| `POST` | `/tokens` | Tokenizar cartão de crédito |
+| `POST` | `/v2/transactions` | Criar transação (PIX ou cartão) |
+| `GET` | `/v2/transactions/{tid}` | Consultar status de transação |
+| `POST` | `/token-service/oauth/v2/tokenization` | Tokenizar cartão no Cofre |
+| `GET` | `/token-service/oauth/v2/tokenization/{id}` | Consultar status de tokenização |
+| `POST` | `/token-service/oauth/v2/tokenization/{id}/management` | Deletar tokenização (action=delete) |
+| `POST` | `/api/erede/webhook` | Receber eventos da Rede (sem JWT). Headers: Request-ID (obrigatório) + X-Erede-Secret (opcional) |
 
 ---
 
@@ -114,7 +121,7 @@ Ambos os campos são persistidos em `Payment.nsu` e `Payment.authorizationCode` 
 
 ---
 
-## Tokenização de cartão
+## Tokenização de cartão (Cofre eRede — `/token-service/oauth/v2/tokenization`)
 
 **Request:**
 ```json
@@ -122,18 +129,28 @@ Ambos os campos são persistidos em `Payment.nsu` e `Payment.authorizationCode` 
   "cardNumber": "4111111111111111",
   "expirationMonth": "12",
   "expirationYear": "2028",
-  "cardHolderName": "JOAO DA SILVA"
+  "cardHolderName": "JOAO DA SILVA",
+  "email": "joao@email.com",
+  "securityCode": "123"
 }
 ```
 
-**Response:**
+**Response (criação):**
 ```json
 {
-  "token": "token-opaco",
-  "last4digits": "1111",
-  "brand": "VISA"
+  "tokenizationId": "uuid-opaco",
+  "status": "ACTIVE",
+  "cardBrand": "VISA",
+  "lastFour": "1111",
+  "bin": "411111"
 }
 ```
+
+O `tokenizationId` é armazenado internamente em `saved_cards.tokenization_id` e **nunca** é exposto ao frontend. O status pode ser `PENDING` (confirmação assíncrona via webhook) ou `ACTIVE` (confirmado imediatamente).
+
+**Consulta de status:** `GET /token-service/oauth/v2/tokenization/{tokenizationId}`
+
+**Deleção:** `POST /token-service/oauth/v2/tokenization/{tokenizationId}/management` com body `{ "action": "delete" }`
 
 ---
 
@@ -170,9 +187,13 @@ Quando o pagamento usa um cartão previamente salvo, o payload de criação de t
 
 ---
 
-## Validação de callbacks
+## Validação de callbacks / Webhook
 
-A eRede não usa HMAC. A validação atual verifica estrutura mínima (`tid` presente, `returnCode` definido). Segurança adicional deve ser garantida por HTTPS + whitelist de IPs do gateway no firewall.
+A eRede não usa HMAC. A validação atual verifica estrutura mínima (`tid` presente, `returnCode` definido) e idempotência via `Request-ID` (header obrigatório — eventos duplicados são ignorados se já processados).
+
+Segurança adicional via header `X-Erede-Secret` (comparado com `EREDE_CALLBACK_SECRET` se configurado) + HTTPS + whitelist de IPs do gateway no firewall.
+
+**Eventos de Cofre (tokenização):** o webhook também recebe eventos do Cofre (`tokenizationId`, `status`). O `EredeWebhookService.syncFromWebhook` atualiza `saved_cards.status` com base no evento recebido.
 
 ---
 

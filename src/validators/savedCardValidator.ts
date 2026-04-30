@@ -24,6 +24,12 @@ const createSavedCardValidator = [
     .withMessage('Nome do titular é obrigatório.')
     .isLength({ min: 2 })
     .withMessage('Nome do titular deve ter pelo menos 2 caracteres.'),
+
+  body('securityCode')
+    .optional()
+    .isString()
+    .isLength({ min: 3, max: 4 })
+    .withMessage('CVV deve ter 3 ou 4 dígitos.'),
 ];
 
 export { createSavedCardValidator };

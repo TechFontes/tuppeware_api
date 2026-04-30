@@ -77,4 +77,33 @@ describe('createSavedCardValidator', () => {
     const result = await runValidation({ ...validBody, holderName: 'A' });
     expect(result.isEmpty()).toBe(false);
   });
+
+  it('aceita securityCode de 3 dígitos (CVV)', async () => {
+    const result = await runValidation({ ...validBody, securityCode: '123' });
+    expect(result.isEmpty()).toBe(true);
+  });
+
+  it('aceita securityCode de 4 dígitos (Amex)', async () => {
+    const result = await runValidation({ ...validBody, securityCode: '1234' });
+    expect(result.isEmpty()).toBe(true);
+  });
+
+  it('aceita body sem securityCode (campo opcional)', async () => {
+    const result = await runValidation(validBody);
+    expect(result.isEmpty()).toBe(true);
+  });
+
+  it('rejeita securityCode com menos de 3 dígitos', async () => {
+    const result = await runValidation({ ...validBody, securityCode: '12' });
+    expect(result.isEmpty()).toBe(false);
+    const errors = result.array();
+    expect(errors.some((e: any) => e.path === 'securityCode')).toBe(true);
+  });
+
+  it('rejeita securityCode com mais de 4 dígitos', async () => {
+    const result = await runValidation({ ...validBody, securityCode: '12345' });
+    expect(result.isEmpty()).toBe(false);
+    const errors = result.array();
+    expect(errors.some((e: any) => e.path === 'securityCode')).toBe(true);
+  });
 });
