@@ -526,6 +526,16 @@ describe('ERedeService.createTransaction', () => {
     await expect(mod.default.createTransaction({ kind: 'pix', reference: 'TPW-1', amount: 1000, expirationDate: '' }))
       .rejects.toMatchObject({ statusCode: 500 });
   });
+
+  it('lança AppError 503 em erro genérico de rede (ECONNREFUSED)', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockRejectedValueOnce(new Error('ECONNREFUSED')));
+
+    const svc = await getService();
+    await expect(svc.createTransaction(svc.buildPixPayload('TPW-1', 1000)))
+      .rejects.toMatchObject({ statusCode: 503 });
+  });
 });
 
 describe('ERedeService.queryTokenization', () => {
