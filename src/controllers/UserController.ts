@@ -122,16 +122,14 @@ class UserController {
 
       const card = await savedCardService.tokenizeAndSave({
         userId: req.user!.id,
+        email: req.user!.email,
         cardNumber,
         expMonth,
         expYear,
         holderName,
       });
 
-      // Não expor token opaco ao frontend
-      const { token: _token, ...safeCard } = card as Record<string, unknown>;
-
-      res.status(StatusCodes.CREATED).json({ status: 'success', data: safeCard });
+      res.status(StatusCodes.CREATED).json({ status: 'success', data: card });
     } catch (error) {
       next(error);
     }

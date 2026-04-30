@@ -4,8 +4,6 @@ import {
   eredeApiUrl,
   eredeCallbackSecret,
   eredeClientId,
-  eredeIntegrationKey,
-  eredePv,
   eredePixExpirationHours,
   eredeSoftDescriptor,
   eredeTimeoutMs,
@@ -23,14 +21,10 @@ import type {
 
 class ERedeService {
   private readonly baseUrl: string;
-  private readonly pv: string;
-  private readonly integrationKey: string;
   private readonly timeoutMs: number;
 
   constructor() {
     this.baseUrl = eredeApiUrl;
-    this.pv = eredePv;
-    this.integrationKey = eredeIntegrationKey;
     this.timeoutMs = eredeTimeoutMs;
   }
 
@@ -62,67 +56,6 @@ class ERedeService {
       reference: String(json.reference ?? ''),
       raw: json,
     };
-  }
-
-  /**
-   * Tokeniza um cartão de crédito para pagamentos futuros.
-   * Retorna o token que pode ser armazenado no banco.
-   */
-  async tokenizeCard(cardData: {
-    number: string;
-    expMonth: string;
-    expYear: string;
-    holderName: string;
-  }): Promise<{ token: string; lastFour: string; brand: string }> {
-    this.validateConfig();
-
-    const tokenUrl = this.baseUrl.replace('/transactions', '/tokens');
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-
-    try {
-      const response = await fetch(tokenUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          Authorization: this.buildBasicAuth(),
-        },
-        body: JSON.stringify({
-          cardNumber: cardData.number,
-          expirationMonth: cardData.expMonth,
-          expirationYear: cardData.expYear,
-          cardHolderName: cardData.holderName,
-        }),
-        signal: controller.signal,
-      });
-
-      const json = await response.json() as Record<string, unknown>;
-
-      if (!response.ok) {
-        const errMsg = (json.returnMessage as string) || 'Erro ao tokenizar cartão na eRede.';
-        throw new AppError(errMsg, StatusCodes.BAD_GATEWAY);
-      }
-
-      return {
-        token: String(json.token ?? ''),
-        lastFour: String(json.last4digits ?? cardData.number.slice(-4)),
-        brand: String(json.brand ?? ''),
-      };
-    } catch (error) {
-      if (error instanceof AppError) {throw error;}
-
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new AppError('Timeout ao tokenizar cartão na eRede.', StatusCodes.GATEWAY_TIMEOUT);
-      }
-
-      throw new AppError(
-        `Falha ao tokenizar cartão: ${(error as Error).message}`,
-        StatusCodes.SERVICE_UNAVAILABLE,
-      );
-    } finally {
-      clearTimeout(timeout);
-    }
   }
 
   /**
@@ -413,20 +346,6 @@ class ERedeService {
       );
     } finally {
       clearTimeout(timeout);
-    }
-  }
-
-  private buildBasicAuth(): string {
-    const credentials = Buffer.from(`${this.pv}:${this.integrationKey}`).toString('base64');
-    return `Basic ${credentials}`;
-  }
-
-  private validateConfig(): void {
-    if (!this.pv || !this.integrationKey) {
-      throw new AppError(
-        'Credenciais da eRede não configuradas (EREDE_PV / EREDE_INTEGRATION_KEY).',
-        StatusCodes.INTERNAL_SERVER_ERROR,
-      );
     }
   }
 

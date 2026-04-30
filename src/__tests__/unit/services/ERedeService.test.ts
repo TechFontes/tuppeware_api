@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 beforeEach(() => {
-  process.env.EREDE_PV = 'test-pv';
-  process.env.EREDE_INTEGRATION_KEY = 'test-key';
   process.env.EREDE_PIX_EXPIRATION_HOURS = '24';
   process.env.EREDE_SOFT_DESCRIPTOR = 'TUPPEWARE-TEST';
 });
@@ -125,51 +123,6 @@ describe('ERedeService.validateCallbackSignature', () => {
   });
 });
 
-describe('ERedeService.tokenizeCard', () => {
-  afterEach(() => { vi.unstubAllGlobals(); });
-
-  it('tokeniza cartão e retorna token, lastFour, brand', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ token: 'tok_abc', last4digits: '4242', brand: 'VISA' }),
-    }));
-    const svc = await getService();
-
-    const result = await svc.tokenizeCard({
-      number: '4242424242424242', expMonth: '12', expYear: '2028', holderName: 'Test User',
-    });
-
-    expect(result.token).toBe('tok_abc');
-    expect(result.lastFour).toBe('4242');
-    expect(result.brand).toBe('VISA');
-  });
-
-  it('lança AppError quando tokenização falha (response não ok)', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      json: async () => ({ returnMessage: 'Cartão inválido' }),
-    }));
-    const svc = await getService();
-
-    await expect(svc.tokenizeCard({
-      number: '0000000000000000', expMonth: '01', expYear: '2020', holderName: 'Test',
-    })).rejects.toMatchObject({ statusCode: 502 });
-  });
-
-  it('lança AppError de timeout quando AbortController dispara', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
-      const err = new Error('AbortError');
-      err.name = 'AbortError';
-      return Promise.reject(err);
-    }));
-    const svc = await getService();
-
-    await expect(svc.tokenizeCard({
-      number: '4242424242424242', expMonth: '12', expYear: '2028', holderName: 'Test',
-    })).rejects.toMatchObject({ statusCode: 504 });
-  });
-});
-
 describe('ERedeService.queryTransaction', () => {
   beforeEach(() => {
     process.env.EREDE_CLIENT_ID = 'test-client';
@@ -266,19 +219,6 @@ describe('ERedeService.buildCreditPayload — campos adicionais', () => {
   });
 });
 
-
-describe('ERedeService.tokenizeCard — erro genérico de rede', () => {
-  afterEach(() => { vi.unstubAllGlobals(); });
-
-  it('lança AppError 503 quando tokenizeCard lança erro genérico (não AbortError)', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ETIMEDOUT')));
-    const svc = await getService();
-
-    await expect(svc.tokenizeCard({
-      number: '4242424242424242', expMonth: '12', expYear: '2028', holderName: 'Test',
-    })).rejects.toMatchObject({ statusCode: 503 });
-  });
-});
 
 describe('ERedeService.validateCallbackSignature — com secret configurado', () => {
   afterEach(() => {

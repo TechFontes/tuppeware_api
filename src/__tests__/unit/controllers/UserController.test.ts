@@ -143,11 +143,10 @@ describe('UserController.getSavedCards', () => {
 });
 
 describe('UserController.createSavedCard', () => {
-  it('chama savedCardService.tokenizeAndSave e retorna 201', async () => {
+  it('chama savedCardService.tokenizeAndSave (com email) e retorna 201', async () => {
     vi.mocked(savedCardService.tokenizeAndSave).mockResolvedValueOnce({
-      id: 'card-new', userId: 'user-1', token: 'tok_abc',
-      cardBrand: 'VISA', lastFour: '1111', holderName: 'Test User',
-      createdAt: new Date(), updatedAt: new Date(),
+      id: 'card-new', status: 'ACTIVE', cardBrand: 'VISA', lastFour: '1111',
+      holderName: 'Test User', bin: null, createdAt: new Date(),
     } as any);
 
     const req = makeReq('user-1', {}, {
@@ -163,6 +162,7 @@ describe('UserController.createSavedCard', () => {
 
     expect(savedCardService.tokenizeAndSave).toHaveBeenCalledWith({
       userId: 'user-1',
+      email: 'x@x.com',
       cardNumber: '4111111111111111',
       expMonth: '12',
       expYear: '2028',
@@ -177,11 +177,10 @@ describe('UserController.createSavedCard', () => {
     );
   });
 
-  it('não expõe o token no response', async () => {
+  it('não expõe tokenizationId no response (SavedCardPublicView)', async () => {
     vi.mocked(savedCardService.tokenizeAndSave).mockResolvedValueOnce({
-      id: 'card-new', userId: 'user-1', token: 'tok_secret',
-      cardBrand: 'VISA', lastFour: '1111', holderName: 'Test User',
-      createdAt: new Date(), updatedAt: new Date(),
+      id: 'card-new', status: 'PENDING', cardBrand: 'VISA', lastFour: '1111',
+      holderName: 'Test User', bin: null, createdAt: new Date(),
     } as any);
 
     const req = makeReq('user-1', {}, {
@@ -192,7 +191,7 @@ describe('UserController.createSavedCard', () => {
     await userController.createSavedCard(req, res, makeNext());
 
     const responseData = res.json.mock.calls[0][0].data;
-    expect(responseData.token).toBeUndefined();
+    expect(responseData.tokenizationId).toBeUndefined();
   });
 
   it('chama next(error) quando service lança erro', async () => {

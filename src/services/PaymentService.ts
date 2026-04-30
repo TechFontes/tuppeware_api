@@ -217,8 +217,10 @@ class PaymentService {
     // Tokeniza e salva o cartão se solicitado e pagamento aprovado
     if (method === 'CARTAO_CREDITO' && saveCard && card && gatewayResponse.returnCode === '00') {
       try {
+        const user = await userRepository.findById(userId);
         await savedCardService.tokenizeAndSave({
           userId,
+          email: user?.email ?? billing?.email ?? '',
           cardNumber: card.number,
           expMonth: card.expMonth,
           expYear: card.expYear,
