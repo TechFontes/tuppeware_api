@@ -3,6 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import paymentService from '../services/PaymentService';
 import AppError from '../utils/AppError';
 import type { ERedeCallbackPayload } from '../types';
+import { timingSafeStringCompare } from '../utils/timingSafeStringCompare';
 
 class PaymentController {
   /**
@@ -47,7 +48,7 @@ class PaymentController {
 
       if (callbackSecret) {
         const headerSecret = req.headers['x-erede-secret'];
-        if (!headerSecret || headerSecret !== callbackSecret) {
+        if (typeof headerSecret !== 'string' || !timingSafeStringCompare(headerSecret, callbackSecret)) {
           throw new AppError('Acesso não autorizado ao callback.', StatusCodes.BAD_REQUEST);
         }
       }

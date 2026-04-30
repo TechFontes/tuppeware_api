@@ -3,6 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import eredeWebhookRepository from '../repositories/EredeWebhookRepository';
 import eredeWebhookService from '../services/EredeWebhookService';
 import type { EredeWebhookEventType } from '../../generated/prisma/client';
+import { timingSafeStringCompare } from '../utils/timingSafeStringCompare';
 
 interface WebhookBody {
   eventType?: string;
@@ -17,7 +18,7 @@ class EredeWebhookController {
     const callbackSecret = process.env.EREDE_CALLBACK_SECRET || '';
     if (callbackSecret) {
       const provided = req.headers['x-erede-secret'];
-      if (provided !== callbackSecret) {
+      if (typeof provided !== 'string' || !timingSafeStringCompare(provided, callbackSecret)) {
         res.status(StatusCodes.UNAUTHORIZED).json({ status: 'fail', message: 'Webhook não autorizado' });
         return;
       }
