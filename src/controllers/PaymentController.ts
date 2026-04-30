@@ -49,7 +49,7 @@ class PaymentController {
       if (callbackSecret) {
         const headerSecret = req.headers['x-erede-secret'];
         if (typeof headerSecret !== 'string' || !timingSafeStringCompare(headerSecret, callbackSecret)) {
-          throw new AppError('Acesso não autorizado ao callback.', StatusCodes.BAD_REQUEST);
+          throw new AppError('Callback não autorizado.', StatusCodes.UNAUTHORIZED);
         }
       }
 

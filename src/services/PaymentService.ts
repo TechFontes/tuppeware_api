@@ -219,8 +219,10 @@ class PaymentService {
       await debtRepository.updateMany({ id: { in: debtIds } }, { status: 'PAGO' });
     }
 
-    // Tokeniza e salva o cartão se solicitado e pagamento aprovado
-    if (method === 'CARTAO_CREDITO' && saveCard && card && gatewayResponse.returnCode === '00') {
+    // Tokeniza e salva o cartão se solicitado e pagamento aprovado.
+    // Quando savedCardId está presente, card.number é '' (caminho de cartão salvo) —
+    // não tentar re-tokenizar: a chamada falharia silenciosamente no gateway.
+    if (method === 'CARTAO_CREDITO' && saveCard && !savedCardId && card && gatewayResponse.returnCode === '00') {
       try {
         const user = await userRepository.findById(userId);
         await savedCardService.tokenizeAndSave({

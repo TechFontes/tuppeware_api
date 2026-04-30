@@ -43,9 +43,10 @@ class EredeWebhookController {
 
     const eventType: EredeWebhookEventType = isToken ? 'TOKENIZATION' : 'TRANSACTION';
 
-    // 5.3 — idempotência
+    // 5.3 — idempotência (com proteção contra race condition)
     const existing = await eredeWebhookRepository.findByExternalId(externalId);
     let eventId: string;
+
     if (existing) {
       if (existing.processed) {
         res.status(StatusCodes.OK).json({ status: 'ok', duplicate: true });
@@ -53,13 +54,23 @@ class EredeWebhookController {
       }
       eventId = existing.id;
     } else {
-      const created = await eredeWebhookRepository.create({
-        externalId,
-        eventType,
-        events: [eventTypeRaw],
-        payload: body,
-      });
-      eventId = created.id;
+      try {
+        const created = await eredeWebhookRepository.create({
+          externalId,
+          eventType,
+          events: [eventTypeRaw],
+          payload: body,
+        });
+        eventId = created.id;
+      } catch (err) {
+        // Race condition: outro worker criou simultaneamente. Tratar como duplicata.
+        const isPrismaUniqueViolation = (err as { code?: string }).code === 'P2002';
+        if (isPrismaUniqueViolation) {
+          res.status(StatusCodes.OK).json({ status: 'ok', duplicate: true });
+          return;
+        }
+        throw err;
+      }
     }
 
     // 5.4-5.5 — processar

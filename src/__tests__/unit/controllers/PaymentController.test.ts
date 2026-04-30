@@ -46,7 +46,7 @@ describe('PaymentController.eredeCallback', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  it('rejeita com 400 quando secret configurado mas header ausente', async () => {
+  it('rejeita com 401 quando secret configurado mas header ausente', async () => {
     process.env.EREDE_CALLBACK_SECRET = 'meu-secret-callback';
 
     const req = makeReq({ tid: 'tid-1', returnCode: '00', status: 0 }, {}); // sem header
@@ -56,14 +56,14 @@ describe('PaymentController.eredeCallback', () => {
     await paymentController.eredeCallback(req, res, next);
 
     expect(next).toHaveBeenCalledWith(
-      expect.objectContaining({ statusCode: StatusCodes.BAD_REQUEST }),
+      expect.objectContaining({ statusCode: StatusCodes.UNAUTHORIZED }),
     );
     expect(paymentService.processGatewayCallback).not.toHaveBeenCalled();
 
     delete process.env.EREDE_CALLBACK_SECRET;
   });
 
-  it('rejeita com 400 quando header não confere com secret configurado', async () => {
+  it('rejeita com 401 quando header não confere com secret configurado', async () => {
     process.env.EREDE_CALLBACK_SECRET = 'meu-secret-callback';
 
     const req = makeReq(
@@ -76,7 +76,7 @@ describe('PaymentController.eredeCallback', () => {
     await paymentController.eredeCallback(req, res, next);
 
     expect(next).toHaveBeenCalledWith(
-      expect.objectContaining({ statusCode: StatusCodes.BAD_REQUEST }),
+      expect.objectContaining({ statusCode: StatusCodes.UNAUTHORIZED }),
     );
     expect(paymentService.processGatewayCallback).not.toHaveBeenCalled();
 

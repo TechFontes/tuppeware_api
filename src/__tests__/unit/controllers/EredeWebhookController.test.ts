@@ -99,6 +99,24 @@ describe('EredeWebhookController.handle — idempotência', () => {
     expect(eredeWebhookService.syncTokenization).not.toHaveBeenCalled();
   });
 
+  it('race condition: P2002 no create vira duplicate=true', async () => {
+    vi.mocked(eredeWebhookRepository.findByExternalId).mockResolvedValueOnce(null);
+    const p2002 = Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
+    vi.mocked(eredeWebhookRepository.create).mockRejectedValueOnce(p2002);
+
+    const req: any = {
+      headers: { 'request-id': 'r1' },
+      body: { eventType: 'PV.TOKENIZACAO-BANDEIRA', tokenizationId: 'tok' },
+    };
+    const res = mockRes();
+
+    await eredeWebhookController.handle(req, res, vi.fn());
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.duplicate).toBe(true);
+    expect(eredeWebhookService.syncTokenization).not.toHaveBeenCalled();
+  });
+
   it('duplicata processed=false → re-tenta processar', async () => {
     vi.mocked(eredeWebhookRepository.findByExternalId).mockResolvedValueOnce({
       id: 'e1', processed: false,
