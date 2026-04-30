@@ -229,13 +229,16 @@ class ERedeService {
     const url = `${eredeTokenServiceUrl}/tokenization/${encodeURIComponent(tokenizationId)}`;
     const json = await this._authedFetchJson(url, { method: 'GET' });
 
+    // brand vem como objeto { name, tokenStatus, brandTid } no GET v2.
+    const brandObj = (json.brand && typeof json.brand === 'object') ? json.brand as Record<string, unknown> : undefined;
+
     return {
       tokenizationId: String(json.tokenizationId ?? tokenizationId),
       status: this._mapTokenizationStatus(String(json.tokenizationStatus ?? '')),
       bin: json.bin ? String(json.bin) : undefined,
-      last4: json.last4digits ? String(json.last4digits) : undefined,
-      brand: json.brand ? String(json.brand) : undefined,
-      brandTid: json.brandTid ? String(json.brandTid) : undefined,
+      last4: json.last4 ? String(json.last4) : undefined,
+      brand: brandObj?.name ? String(brandObj.name) : undefined,
+      brandTid: brandObj?.brandTid ? String(brandObj.brandTid) : undefined,
       lastModifiedDate: json.lastModifiedDate ? String(json.lastModifiedDate) : undefined,
       raw: json,
     };

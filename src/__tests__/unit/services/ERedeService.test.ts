@@ -508,17 +508,16 @@ describe('ERedeService.queryTokenization', () => {
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-  it('faz GET /tokenization/{id} e mapeia status', async () => {
+  it('faz GET /tokenization/{id} e mapeia o formato real da v2 (brand como objeto, last4 sem suffix)', async () => {
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
       .mockResolvedValueOnce(json({
         tokenizationId: 'tok-uuid',
         tokenizationStatus: 'Active',
         bin: '544828',
-        last4digits: '0007',
-        brand: 'MASTERCARD',
-        brandTid: 'btid-1',
-        lastModifiedDate: '2026-04-30T12:00:00Z',
+        last4: '0007',
+        brand: { name: 'Mastercard', tokenStatus: 'Pending', brandTid: '601486334267364' },
+        lastModifiedDate: '2026-04-30T12:00:00-03:00',
       })));
 
     const svc = await getService();
@@ -528,8 +527,8 @@ describe('ERedeService.queryTokenization', () => {
     expect(result.status).toBe('ACTIVE');
     expect(result.bin).toBe('544828');
     expect(result.last4).toBe('0007');
-    expect(result.brand).toBe('MASTERCARD');
-    expect(result.brandTid).toBe('btid-1');
+    expect(result.brand).toBe('Mastercard');
+    expect(result.brandTid).toBe('601486334267364');
   });
 
   it('mapeia "Suspended" para INACTIVE', async () => {
