@@ -40,6 +40,13 @@ enum GatewayProvider {
   EREDE
 }
 
+enum SavedCardStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+  FAILED
+}
+
 // ==========================================
 // Models
 // ==========================================
@@ -168,16 +175,23 @@ model PasswordReset {
 }
 
 model SavedCard {
-  id            String   @id @default(uuid())
-  userId        String   @map("user_id")
-  token         String   @unique
-  cardBrand     String?  @map("card_brand")
-  lastFour      String   @map("last_four")
-  holderName    String   @map("holder_name")
-  createdAt     DateTime @default(now()) @map("created_at")
+  id              String          @id @default(uuid())
+  userId          String          @map("user_id")
+  tokenizationId  String          @unique @map("tokenization_id")
+  status          SavedCardStatus @default(PENDING)
+  email           String
+  bin             String?
+  cardBrand       String?         @map("card_brand")
+  lastFour        String          @map("last_four")
+  holderName      String          @map("holder_name")
+  brandTid        String?         @map("brand_tid")
+  lastSyncedAt    DateTime?       @map("last_synced_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt      @map("updated_at")
 
   user User @relation(fields: [userId], references: [id])
 
+  @@index([tokenizationId])
   @@map("saved_cards")
 }
 
