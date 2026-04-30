@@ -339,6 +339,105 @@ describe('ERedeService.buildCreditPayload — com cardToken', () => {
   });
 });
 
+describe('ERedeService.tokenizeCardCofre', () => {
+  beforeEach(() => {
+    process.env.EREDE_CLIENT_ID = 'test-client';
+    process.env.EREDE_CLIENT_SECRET = 'test-secret';
+    process.env.EREDE_OAUTH_URL = 'https://oauth.test/oauth2/token';
+    process.env.EREDE_TOKEN_SERVICE_URL = 'https://api.test/token-service/oauth/v2';
+  });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  const cardData = {
+    email: 'user@test.com',
+    cardNumber: '5448280000000007',
+    expirationMonth: '12',
+    expirationYear: '2030',
+    cardholderName: 'TESTE',
+  };
+
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+  it('chama POST /tokenization com Bearer + Affiliation', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok-bearer', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({ tokenizationId: 'tok-uuid-123' }, 201));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const svc = await getService();
+    const result = await svc.tokenizeCardCofre(cardData);
+
+    expect(result.tokenizationId).toBe('tok-uuid-123');
+    const [url, init] = fetchMock.mock.calls[1];
+    expect(url).toBe('https://api.test/token-service/oauth/v2/tokenization');
+    expect(init.method).toBe('POST');
+    expect(init.headers.Authorization).toBe('Bearer tok-bearer');
+    expect(init.headers.Affiliation).toBe('test-client');
+  });
+
+  it('lança AppError 502 quando Rede retorna content-type não-JSON', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(new Response('<?xml version="1.0"?><error/>', {
+        status: 403,
+        headers: { 'content-type': 'application/xml' },
+      })));
+
+    const svc = await getService();
+    await expect(svc.tokenizeCardCofre(cardData))
+      .rejects.toMatchObject({ statusCode: 502, message: expect.stringContaining('não-JSON') });
+  });
+
+  it('retry em 401: invalida token e tenta 1x mais', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok-old', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({ error: 'unauthorized' }, 401))
+      .mockResolvedValueOnce(json({ access_token: 'tok-new', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({ tokenizationId: 'after-retry' }, 201));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const svc = await getService();
+    const result = await svc.tokenizeCardCofre(cardData);
+
+    expect(result.tokenizationId).toBe('after-retry');
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it('lança AppError com returnMessage da Rede quando 4xx com payload', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({ returnMessage: 'Cartão inválido', returnCode: '99' }, 400)));
+
+    const svc = await getService();
+    await expect(svc.tokenizeCardCofre(cardData))
+      .rejects.toMatchObject({ message: expect.stringContaining('Cartão inválido') });
+  });
+
+  it('lança AppError 502 quando 5xx', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({ error: 'server' }, 503)));
+
+    const svc = await getService();
+    await expect(svc.tokenizeCardCofre(cardData))
+      .rejects.toMatchObject({ statusCode: 502 });
+  });
+
+  it('inclui securityCode no body quando fornecido', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({ tokenizationId: 'id' }, 201));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const svc = await getService();
+    await svc.tokenizeCardCofre({ ...cardData, securityCode: '123' });
+
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(body.securityCode).toBe('123');
+  });
+});
+
 describe('ERedeService.createTransaction', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 

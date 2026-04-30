@@ -3,12 +3,15 @@ import AppError from '../utils/AppError';
 import {
   eredeApiUrl,
   eredeCallbackSecret,
+  eredeClientId,
   eredeIntegrationKey,
   eredePv,
   eredePixExpirationHours,
   eredeSoftDescriptor,
   eredeTimeoutMs,
+  eredeTokenServiceUrl,
 } from '../config/erede';
+import oauthClient from './EredeOAuthClient';
 import type {
   ERedeTransactionRequest,
   ERedePixRequest,
@@ -302,6 +305,115 @@ class ERedeService {
         },
       },
     };
+  }
+
+  /**
+   * Tokeniza um cartão via Cofre eRede (OAuth + Affiliation).
+   * Endpoint: POST {EREDE_TOKEN_SERVICE_URL}/tokenization.
+   */
+  async tokenizeCardCofre(params: {
+    email: string;
+    cardNumber: string;
+    expirationMonth: string;
+    expirationYear: string;
+    cardholderName: string;
+    securityCode?: string;
+  }): Promise<{ tokenizationId: string }> {
+    const url = `${eredeTokenServiceUrl}/tokenization`;
+    const body: Record<string, string> = {
+      email: params.email,
+      cardNumber: params.cardNumber,
+      expirationMonth: params.expirationMonth,
+      expirationYear: params.expirationYear,
+      cardholderName: params.cardholderName,
+    };
+    if (params.securityCode) { body.securityCode = params.securityCode; }
+
+    const json = await this._authedFetchJson(url, { method: 'POST', body: JSON.stringify(body) });
+
+    return { tokenizationId: String(json.tokenizationId ?? '') };
+  }
+
+  /**
+   * Helper privado: faz fetch autenticado com retry em 401, content-type guard
+   * e tradução de erros pra AppError.
+   */
+  private async _authedFetchJson(
+    url: string,
+    init: RequestInit,
+    isRetry = false,
+  ): Promise<Record<string, unknown>> {
+    if (!eredeClientId) {
+      throw new AppError(
+        'Configuração inválida: EREDE_CLIENT_ID ausente (Affiliation header).',
+        StatusCodes.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), eredeTimeoutMs);
+
+    try {
+      const accessToken = await oauthClient.getAccessToken();
+      const headers: Record<string, string> = {
+        ...(init.headers as Record<string, string> | undefined),
+        Authorization: `Bearer ${accessToken}`,
+        Affiliation: eredeClientId,
+        Accept: 'application/json',
+      };
+      if (init.body && !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+      }
+
+      const response = await fetch(url, { ...init, headers, signal: controller.signal });
+
+      if (response.status === 401 && !isRetry) {
+        oauthClient.invalidate();
+        return await this._authedFetchJson(url, init, true);
+      }
+
+      const contentType = response.headers.get('content-type') ?? '';
+      if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new AppError(
+          `eRede retornou resposta não-JSON (status ${response.status}, content-type ${contentType}): ${text.slice(0, 200)}`,
+          StatusCodes.BAD_GATEWAY,
+        );
+      }
+
+      const json = (await response.json()) as Record<string, unknown>;
+
+      if (!response.ok) {
+        if (response.status >= 500) {
+          throw new AppError(
+            (json.returnMessage as string) || 'Erro no gateway eRede',
+            StatusCodes.BAD_GATEWAY,
+          );
+        }
+        throw new AppError(
+          (json.returnMessage as string) || `eRede retornou HTTP ${response.status}`,
+          StatusCodes.BAD_REQUEST,
+        );
+      }
+
+      return json;
+    } catch (error) {
+      if (error instanceof AppError) { throw error; }
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new AppError(
+          'Timeout ao conectar com a eRede.',
+          StatusCodes.GATEWAY_TIMEOUT,
+        );
+      }
+
+      throw new AppError(
+        `Falha ao conectar com a eRede: ${(error as Error).message}`,
+        StatusCodes.SERVICE_UNAVAILABLE,
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private buildBasicAuth(): string {
