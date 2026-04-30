@@ -141,8 +141,14 @@ model Payment {
   createdAt            DateTime        @default(now()) @map("created_at")
   updatedAt            DateTime        @updatedAt @map("updated_at")
 
+  brandTid           String?    @map("brand_tid")
+  cardBin            String?    @map("card_bin")
+  transactionLinkId  String?    @map("transaction_link_id")
+  savedCardId        String?    @map("saved_card_id")
+
   user         User          @relation(fields: [userId], references: [id])
   paymentDebts PaymentDebt[]
+  savedCard    SavedCard?    @relation(fields: [savedCardId], references: [id])
 
   @@index([referenceNum])
   @@index([gatewayTransactionId])
@@ -189,7 +195,8 @@ model SavedCard {
   createdAt       DateTime        @default(now()) @map("created_at")
   updatedAt       DateTime        @updatedAt      @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id])
+  user     User      @relation(fields: [userId], references: [id])
+  payments Payment[]
 
   @@map("saved_cards")
 }
