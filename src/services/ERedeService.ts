@@ -188,12 +188,15 @@ class ERedeService {
     securityCode?: string;
   }): Promise<{ tokenizationId: string }> {
     const url = `${eredeTokenServiceUrl}/tokenization`;
-    const body: Record<string, string> = {
+    // storageCard=2 = armazenamento permanente para uso múltiplo (Cofre).
+    // Descoberto em smoke test contra sandbox: parâmetro obrigatório, não documentado.
+    const body: Record<string, string | number> = {
       email: params.email,
       cardNumber: params.cardNumber,
       expirationMonth: params.expirationMonth,
       expirationYear: params.expirationYear,
       cardholderName: params.cardholderName,
+      storageCard: 2,
     };
     if (params.securityCode) { body.securityCode = params.securityCode; }
 

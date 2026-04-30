@@ -393,6 +393,19 @@ describe('ERedeService.tokenizeCardCofre', () => {
     await expect(svc.tokenizeCardCofre(cardData))
       .rejects.toMatchObject({ statusCode: 502 });
   });
+
+  it('envia storageCard=2 (multiple use) por default no body', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({ tokenizationId: 'tok-uuid' }, 201));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const svc = await getService();
+    await svc.tokenizeCardCofre(cardData);
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(sentBody.storageCard).toBe(2);
+  });
 });
 
 describe('ERedeService.createTransaction', () => {
