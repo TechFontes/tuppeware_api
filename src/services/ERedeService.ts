@@ -380,6 +380,26 @@ class ERedeService {
   }
 
   /**
+   * Aciona uma operação de management no Cofre (atualmente: delete).
+   */
+  async manageTokenization(
+    tokenizationId: string,
+    action: 'delete',
+    reason?: number,
+  ): Promise<{ returnCode: string; returnMessage: string }> {
+    const url = `${eredeTokenServiceUrl}/tokenization/${encodeURIComponent(tokenizationId)}/management`;
+    const body: Record<string, unknown> = { action };
+    if (reason !== undefined) body.reason = reason;
+
+    const json = await this._authedFetchJson(url, { method: 'POST', body: JSON.stringify(body) });
+
+    return {
+      returnCode: String(json.returnCode ?? ''),
+      returnMessage: String(json.returnMessage ?? ''),
+    };
+  }
+
+  /**
    * Helper privado: faz fetch autenticado com retry em 401, content-type guard
    * e tradução de erros pra AppError.
    */

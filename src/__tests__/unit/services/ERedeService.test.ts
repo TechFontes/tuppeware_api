@@ -588,3 +588,47 @@ describe('ERedeService.queryTokenization', () => {
       .rejects.toMatchObject({ statusCode: 400 });
   });
 });
+
+describe('ERedeService.manageTokenization', () => {
+  beforeEach(() => {
+    process.env.EREDE_CLIENT_ID = 'test-client';
+    process.env.EREDE_CLIENT_SECRET = 'test-secret';
+    process.env.EREDE_OAUTH_URL = 'https://oauth.test/oauth2/token';
+    process.env.EREDE_TOKEN_SERVICE_URL = 'https://api.test/token-service/oauth/v2';
+  });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+  it('faz POST /tokenization/{id}/management com action=delete', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({ returnCode: '00', returnMessage: 'OK' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const svc = await getService();
+    const result = await svc.manageTokenization('tok-id', 'delete', 1);
+
+    expect(result.returnCode).toBe('00');
+    const [url, init] = fetchMock.mock.calls[1];
+    expect(url).toContain('/tokenization/tok-id/management');
+    expect(init.method).toBe('POST');
+    const body = JSON.parse(init.body);
+    expect(body.action).toBe('delete');
+    expect(body.reason).toBe(1);
+  });
+
+  it('omite reason quando não fornecido', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
+      .mockResolvedValueOnce(json({ returnCode: '00', returnMessage: 'OK' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const svc = await getService();
+    await svc.manageTokenization('tok-id', 'delete');
+
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(body.reason).toBeUndefined();
+  });
+});
