@@ -208,3 +208,23 @@ model Setting {
 
   @@map("settings")
 }
+
+enum EredeWebhookEventType {
+  TOKENIZATION
+  TRANSACTION
+}
+
+model EredeWebhookEvent {
+  id              String                @id @default(uuid())
+  externalId      String                @unique @map("external_id")
+  eventType       EredeWebhookEventType @map("event_type")
+  events          Json
+  payload         Json
+  processed       Boolean               @default(false)
+  processedAt     DateTime?             @map("processed_at")
+  errorMessage    String?               @map("error_message") @db.Text
+  receivedAt      DateTime              @default(now()) @map("received_at")
+
+  @@index([eventType, processed])
+  @@map("erede_webhook_events")
+}
