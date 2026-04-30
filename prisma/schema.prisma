@@ -191,7 +191,6 @@ model SavedCard {
 
   user User @relation(fields: [userId], references: [id])
 
-  @@index([tokenizationId])
   @@map("saved_cards")
 }
 

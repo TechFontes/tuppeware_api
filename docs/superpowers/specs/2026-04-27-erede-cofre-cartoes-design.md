@@ -95,6 +95,9 @@ POST /api/erede/webhook (sem JWT)
 ## Seção 2/6 — Schema de banco ✅ APROVADA (com expansão sob "não economize esforços")
 
 ### `SavedCard` (refator)
+
+**Note (correção pós-review):** o `@@index([tokenizationId])` original foi removido — `@unique` já cria um índice BTREE em MySQL, índice extra é redundante.
+
 ```prisma
 enum SavedCardStatus { PENDING ACTIVE INACTIVE FAILED }
 
@@ -114,7 +117,6 @@ model SavedCard {
   updatedAt       DateTime        @updatedAt      @map("updated_at") // novo
   user User @relation(fields: [userId], references: [id])
   @@map("saved_cards")
-  @@index([tokenizationId])
 }
 ```
 

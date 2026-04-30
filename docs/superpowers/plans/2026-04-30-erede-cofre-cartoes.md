@@ -53,6 +53,8 @@ enum SavedCardStatus {
 
 Substituir o model `SavedCard` (linhas 170-182) por:
 
+**Note (correção pós-review):** o `@@index([tokenizationId])` original foi removido — `@unique` já cria um índice BTREE em MySQL, índice extra é redundante.
+
 ```prisma
 model SavedCard {
   id              String          @id @default(uuid())
@@ -72,7 +74,6 @@ model SavedCard {
   user     User      @relation(fields: [userId], references: [id])
   payments Payment[]
 
-  @@index([tokenizationId])
   @@map("saved_cards")
 }
 ```
