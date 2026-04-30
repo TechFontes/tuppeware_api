@@ -176,6 +176,8 @@ Adicionar antes do bloco `@@index([referenceNum])`:
 
 Crie `prisma/migrations/20260430_payment_v2_fields/migration.sql`:
 
+> **Note (correção pós-review):** o `CREATE INDEX` original foi removido — em MySQL/MariaDB, FOREIGN KEY constraint cria um BTREE index automaticamente na coluna referenciante; índice explícito separado é redundante.
+
 ```sql
 ALTER TABLE `payments`
   ADD COLUMN `brand_tid` VARCHAR(191) NULL,
@@ -183,8 +185,6 @@ ALTER TABLE `payments`
   ADD COLUMN `transaction_link_id` VARCHAR(191) NULL,
   ADD COLUMN `saved_card_id` VARCHAR(191) NULL,
   ADD CONSTRAINT `payments_saved_card_id_fkey` FOREIGN KEY (`saved_card_id`) REFERENCES `saved_cards`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
-
-CREATE INDEX `payments_saved_card_id_idx` ON `payments`(`saved_card_id`);
 ```
 
 - [ ] **Step 3: Aplicar migration**
