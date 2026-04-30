@@ -94,6 +94,15 @@ class PaymentRepository {
     });
   }
 
+  async updateByTid(tid: string, data: Prisma.PaymentUpdateInput) {
+    const found = await prisma.payment.findFirst({
+      where: { gatewayTransactionId: tid },
+      select: { id: true },
+    });
+    if (!found) { return null; }
+    return await prisma.payment.update({ where: { id: found.id }, data });
+  }
+
   async findMany({ where, skip, take }: {
     where?: Prisma.PaymentWhereInput;
     skip?: number;

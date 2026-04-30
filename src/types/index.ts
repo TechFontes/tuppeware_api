@@ -8,6 +8,7 @@ export type {
   PasswordReset,
   SavedCard,
   Setting,
+  EredeWebhookEvent,
 } from '../../generated/prisma/client';
 
 export {
@@ -16,6 +17,7 @@ export {
   PaymentMethod,
   PaymentStatus,
   SavedCardStatus,
+  EredeWebhookEventType,
 } from '../../generated/prisma/client';
 
 // DTOs
