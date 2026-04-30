@@ -16,16 +16,16 @@ afterEach(() => {
 });
 
 describe('config/erede — eredeApiUrl defaults', () => {
-  it('usa sandbox /v1/transactions (sem segmento /rede) quando NODE_ENV != production', async () => {
+  it('usa sandbox /v2/transactions quando NODE_ENV != production', async () => {
     process.env.NODE_ENV = 'development';
     const cfg = await loadConfig();
-    expect(cfg.eredeApiUrl).toBe('https://sandbox-erede.useredecloud.com.br/v1/transactions');
+    expect(cfg.eredeApiUrl).toBe('https://sandbox-erede.useredecloud.com.br/v2/transactions');
   });
 
-  it('usa produção /erede/v1/transactions quando NODE_ENV=production', async () => {
+  it('usa produção /erede/v2/transactions quando NODE_ENV=production', async () => {
     process.env.NODE_ENV = 'production';
     const cfg = await loadConfig();
-    expect(cfg.eredeApiUrl).toBe('https://api.userede.com.br/erede/v1/transactions');
+    expect(cfg.eredeApiUrl).toBe('https://api.userede.com.br/erede/v2/transactions');
   });
 
   it('respeita EREDE_API_URL quando definida (override explícito)', async () => {
