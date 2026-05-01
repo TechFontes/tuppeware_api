@@ -173,3 +173,12 @@ export interface ERedeCallbackPayload {
   nsu?: string;
   authorizationCode?: string;
 }
+
+export {
+  AdminPermission,
+  ALL_PERMISSIONS,
+  PERMISSION_CATALOG,
+  isValidPermission,
+  hasPermission,
+} from './permissions';
+export type { PermissionCatalogEntry } from './permissions';
