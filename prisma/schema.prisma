@@ -68,6 +68,8 @@ model User {
   city             String?
   state            String?
   postalCode       String?   @map("postal_code")
+  permissions      Json      @default("[]")
+  jobTitle         String?   @map("job_title")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
