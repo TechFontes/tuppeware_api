@@ -33,6 +33,29 @@ Se não existe um teste falhando, não existe código novo.
 
 ---
 
+## Documentação externa — sempre a fonte atualizada
+
+**Regra geral:** ao integrar com qualquer SDK/API/framework, **sempre consulte a documentação atualizada online** (Swagger/OpenAPI, portal oficial do dev, docs versionados na web). Nunca dependa de:
+- PDFs antigos baixados localmente (mesmo que pareçam recentes — versionamento de PDF é frágil)
+- Conhecimento prévio do treino do modelo (corta em datas que podem estar atrás da release atual da API)
+- Tutoriais ou repositórios de exemplo que não tenham sido atualizados
+
+**Quando a doc oficial for ambígua, contradizer o código, ou não cobrir o cenário**, valide empiricamente contra o **endpoint sandbox real** (probe com `fetch`/curl) e registre o achado num commit ou no spec correspondente. Sandbox é fonte de verdade superior à doc escrita quando há divergência.
+
+### eRede — doc oficial atual
+
+- **Portal:** https://developer.userede.com.br/e-rede
+- **Swagger online (atualizado em mar/2026):** acessar via portal, aba "API Reference" — esse é o **único contrato confiável**
+- **NÃO usar** os PDFs de "Integration Manual" (v1.13/v1.16/v1.17/v1.21 etc) como referência primária — são versões antigas, frequentemente desatualizadas em relação ao Swagger online
+- **Achados não documentados validados em sandbox** (registrar todos aqui pra evitar redescoberta):
+  - Header `Affiliation: {clientId}` é **obrigatório** em todas as chamadas autenticadas (descoberto pelo `returnCode 26`)
+  - `POST /token-service/oauth/v2/tokenization` exige `storageCard: 2` no body (multiple-use; valor `0` força `securityCode`, valor `1` retorna "Invalid parameter format")
+  - `GET /tokenization/{id}` retorna `brand` como **objeto** `{ name, tokenStatus, brandTid }` — não string. `last4` (não `last4digits`)
+  - `billing.birthDate` **não é exigido** pelo gateway v2 — validado em sandbox 2026-05-01 com `returnCode "00"` sem o campo
+  - `POST /tokenization/{id}/management` (delete) retorna 403 em sandbox para todos os formatos testados — funcionalidade só validável em produção real
+
+---
+
 ## Commands
 
 ```bash
@@ -69,6 +92,43 @@ Copy `.env.example` to `.env`. Required variables:
 - `EREDE_SOFT_DESCRIPTOR` — texto na fatura do cartão
 - `EREDE_TIMEOUT_MS` — timeout de requisições ao gateway
 - SMTP variables for password reset emails
+
+---
+
+## Deploy (Produção)
+
+**Host:** `72.60.242.92` — `api.tupperwarees.com.br`
+**Acesso SSH:** alias `tuppeware-deploy` no `~/.ssh/config` (root + chave `~/.ssh/tuppeware_deploy`, login sem senha já configurado)
+**Path no servidor:** `/root/tuppeware_api`
+**Process manager:** PM2, app name `tuppeware-api` (script: `yarn start` → `node dist/src/server.js`)
+**Banco:** MySQL 8 em container `mysql_tuppeware` no mesmo host
+**TLS/proxy:** Traefik via EasyPanel (`api.tupperwarees.com.br`)
+
+**Importante:** o `docker-compose.yml` do repo está obsoleto — produção **não** usa Docker para a API, só PM2 + build local. O Swarm/EasyPanel do host gerencia outros projetos (n8n, postgres, etc.), não a API.
+
+### Procedimento de deploy
+
+```bash
+ssh tuppeware-deploy
+cd /root/tuppeware_api
+git pull --ff-only origin main
+# se package.json mudou:
+yarn install
+# se prisma/schema.prisma mudou:
+yarn prisma:generate
+yarn prisma:migrate deploy
+# build + restart
+yarn build
+pm2 restart tuppeware-api --update-env
+# verificar
+pm2 status tuppeware-api
+pm2 logs tuppeware-api --lines 30 --nostream
+curl -sk https://api.tupperwarees.com.br/health
+```
+
+### Diagnóstico
+- Logs PM2: `/root/.pm2/logs/tuppeware-api-{out,error}.log`
+- `ValidationError ERR_ERL_KEY_GEN_IPV6` no error.log é warning pré-existente do `express-rate-limit` (não impede subir) — deve ser corrigido no `rateLimitMiddleware`
 
 ---
 
@@ -115,14 +175,16 @@ Enforced in `DebtService._buildWhereClause`:
 - `LIDER` → filtered by `grupo` (looks up consultant by CPF)
 - `CONSULTOR` → filtered by `codigo` (looks up consultant by CPF)
 
-### Payment flow (eRede gateway)
+### Payment flow (eRede gateway — OAuth 2.0 + Cofre v2)
 1. `PaymentService.create` validates debts, computes fees, calls `ERedeService.createTransaction`
-2. `ERedeService` communicates via JSON POST (REST API); Basic Auth with PV + Integration Key
-3. PIX uses `kind: "pix"` with `expirationDate`; credit card uses `kind: "credit"` with card + billing data
-4. Gateway response codes: `"00"` = PAGO, webhook `status=3` = PENDENTE, `status=4` = CANCELADO
-5. Callback validation checks minimum structure (`tid` present, `returnCode` defined)
-6. `referenceNum` format: `TPW-{Date.now()}-{userId.slice(0,8)}`
-7. Values sent to gateway in **cents** (integer): `Math.round(totalValue * 100)`
+2. `EredeOAuthClient` gerencia o Bearer token (cache em memória + dedupe inflight + renova 60s antes de expirar)
+3. `ERedeService._authedFetchJson` adiciona headers `Authorization: Bearer <token>` + `Affiliation: <eredeClientId>` (descoberta não documentada — header obrigatório) + content-type guard contra resposta não-JSON
+4. PIX usa `kind: "pix"` com `expirationDate` (no payload da Rede não há `billing`); cartão usa `kind: "credit"` com card + billing OU com `cardToken` (omitindo `cardNumber`/`cardHolderName`/`expirationMonth`/`expirationYear`)
+5. Cofre de Cartões: `tokenizeCardCofre` envia `storageCard: 2` obrigatório (multiple-use, descoberto em sandbox); `queryTokenization` parse `brand` como objeto `{ name, brandTid }`; `manageTokenization` deleta tokens
+6. Gateway response codes: `"00"` = PAGO, webhook `status=3` = PENDENTE, `status=4` = CANCELADO
+7. Webhook `POST /api/erede/webhook` (sem JWT): idempotência via header `Request-ID` (UNIQUE em `erede_webhook_events`), secret opcional via `X-Erede-Secret` validado em tempo constante (`timingSafeStringCompare`), retry P2002 vira duplicate=true, falha de processamento vira 500 (Rede retenta 12x/30s + 14d)
+8. `referenceNum` format: `TPW-{Date.now()}-{userId.slice(0,8)}`
+9. Values sent to gateway in **cents** (integer): `Math.round(totalValue * 100)`
 
 ### Credit card installment rules
 - Total < R$300 → max 1 installment
@@ -142,3 +204,43 @@ Admin routes accept multipart CSV uploads via Multer. `CsvImportService` handles
   - `dias_atraso` is calculated automatically from `data_vencimento` (not in CSV)
   - `status`: optional PENDENTE | ATRASADO | PAGO (auto-calculated if omitted)
 - Consultants format: `codigo;tipo;grupo;distrito;CPF`
+
+---
+
+## Partial Payments (RF-30/RF-31)
+
+**Status (2026-04-22):** core implementado via plano TDD de 12 tasks. Integration tests **BLOCKED** — DB de testes inacessível (commit `15db847`).
+
+**Fluxo:**
+- Rota `POST /payments/partial` (PIX, single-debt) — valida hierarquia, mínimos e se débito permite parcial
+- `PaymentService.createPartial` reusa helpers privados extraídos (`_callGatewayPix`, `_persistPayment`, `_handleGatewayError`)
+- `DebtRepository.updateDebtPaidAmount` usa lock otimista (compare-and-swap em `paidAmount` + `version`) para evitar race em callbacks concorrentes
+- Callback acumula `paidAmount` e dispara webhook **pós-commit** via `WebhookDispatcher`
+
+**Schema:**
+- `Debt.paidAmount` (Decimal, default 0) + `version` (Int) para lock
+- `Payment.isPartial` (Boolean) — flag distingue parcial de quitação total
+- Listagem de débitos retorna `paidAmount` e `remaining` (computed)
+
+**Configuração (5 chaves em `SettingsService.ALLOWED_SETTINGS`):**
+- `partial_payment_enabled`, `partial_payment_min_amount`, `partial_payment_min_percentage`
+- `partial_webhook_url`, `partial_webhook_secret`
+
+**WebhookDispatcher:** HMAC-SHA256, retry exponencial, `AbortController` timeout. Disparado pós-commit para garantir consistência.
+
+**Docs:** `docs/project/requirements.md` (RF-30/RF-31), Swagger `/api/docs`, plano completo em `docs/plan/partial-payments.md`.
+
+**Pendências:**
+- Destravar DB de testes e rodar suite de integration (commit `15db847`)
+- Validar webhook end-to-end contra consumidor real
+
+---
+
+## Public Settings em /users/me (2026-04-27)
+
+`GET /api/users/me` agora retorna bloco `settings` com flags públicas (`partialPaymentEnabled`, `partialPaymentMinAmount`, `partialPaymentMinRemaining`) — frontend usa pra decidir UI sem precisar de role GERENTE em `/admin/settings`. Secrets de webhook ficam fora. Implementado em `UserController.getMe` via `Promise.all([userService.findById, settingsService.getAll])` + helper `buildPublicSettings`. Commit `bf6c84d`, deployado.
+
+**Pendências de manutenção descobertas no deploy:**
+- `docker-compose.yml` na raiz é obsoleto (prod usa PM2, não Docker) — considerar remover ou marcar como dev-only
+- `rateLimitMiddleware` dispara warning `ERR_ERL_KEY_GEN_IPV6` do `express-rate-limit` (não bloqueia, mas precisa do helper `ipKeyGenerator`)
+- Senha root SSH do servidor de prod foi exposta em chat — trocar e idealmente desabilitar `PasswordAuthentication` (chave já configurada)

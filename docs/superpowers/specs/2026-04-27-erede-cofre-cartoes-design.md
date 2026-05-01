@@ -17,6 +17,8 @@ A doc oficial atual da eRede (Swagger em https://developer.userede.com.br/e-rede
 
 **Descoberta crítica não documentada:** header `Affiliation: {clientId}` é **obrigatório** em todas as chamadas (descoberto pelo erro `returnCode 26 "Affiliation: Required parameter missing"`).
 
+> ⚠️ **Fonte de verdade:** ao trabalhar com a eRede, **sempre consulte o Swagger online no portal `developer.userede.com.br/e-rede`** — é o único contrato confiável. **Não use** os PDFs "Integration Manual" (v1.13/v1.16/v1.17/v1.21 etc) — são versões antigas e frequentemente desatualizadas em relação ao Swagger online. Quando a doc não cobrir um cenário, validar empiricamente contra a sandbox (`POST /v2/transactions` ou similar) e registrar o achado neste spec ou no CLAUDE.md (seção "Documentação externa — sempre a fonte atualizada"). Achados acumulados até 2026-05-01: `storageCard: 2` obrigatório no Cofre, `brand` é objeto no GET, `last4` (não `last4digits`), `billing.birthDate` opcional, `manageTokenization` delete bloqueado em sandbox.
+
 ---
 
 ## Decisões de escopo (fechadas)

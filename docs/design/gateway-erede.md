@@ -1,5 +1,7 @@
 # Gateway eRede — Contrato e Integração
 
+> **Fonte de verdade:** o contrato canônico é o Swagger online no [portal do dev da eRede](https://developer.userede.com.br/e-rede). Os PDFs "Integration Manual" (v1.13/v1.16/v1.17/v1.21 etc) **estão desatualizados** em relação ao Swagger e **não devem ser usados** como referência primária. Achados não documentados validados contra a sandbox real estão registrados no `CLAUDE.md` (seção "Documentação externa — sempre a fonte atualizada") e no spec `docs/superpowers/specs/2026-04-27-erede-cofre-cartoes-design.md`.
+
 ## Configuração
 
 | Variável de ambiente | Descrição |
