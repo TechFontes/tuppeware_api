@@ -27,6 +27,21 @@ class UserRepository {
     });
   }
 
+  /**
+   * Lightweight lookup usado pelo permissionMiddleware (hot path).
+   * Retorna apenas id, permissions e role — sem join com consultant.
+   */
+  async findPermissionsById(id: string): Promise<{
+    id: string;
+    permissions: unknown;
+    role: string;
+  } | null> {
+    return await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, permissions: true, role: true },
+    });
+  }
+
   async update(id: string, data: Prisma.UserUpdateInput): Promise<User> {
     return await prisma.user.update({
       where: { id },
