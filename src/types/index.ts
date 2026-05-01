@@ -51,7 +51,7 @@ export interface CreatePaymentDTO {
     email: string;
     phone: string;
     document: string;
-    birthDate: string;
+    birthDate?: string;
     address: string;
     address2?: string;
     district: string;

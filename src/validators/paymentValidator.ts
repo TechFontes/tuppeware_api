@@ -82,9 +82,13 @@ const createPaymentValidator = [
     .isString()
     .withMessage('Documento no billing é obrigatório.'),
 
+  // birthDate é opcional — eRede v2 não exige (validado em sandbox 2026-05-01:
+  // POST /v2/transactions retornou returnCode 00 sem o campo). Mantido como
+  // opcional pra back-compat com clients que ainda enviam.
   body('billing.birthDate')
+    .optional()
     .isISO8601()
-    .withMessage('Data de nascimento no billing deve estar no formato YYYY-MM-DD.'),
+    .withMessage('Quando enviado, birthDate deve estar no formato YYYY-MM-DD.'),
 
   body('billing.address')
     .isString()
