@@ -89,6 +89,59 @@ router.get('/', (req: Request, res: Response, next: NextFunction) => debtControl
 
 /**
  * @swagger
+ * /debts/summary:
+ *   get:
+ *     tags: [Debts]
+ *     summary: Resumo agregado de débitos para o dashboard
+ *     description: |
+ *       Retorna métricas agregadas (totais, soma a receber, consultores em atraso,
+ *       grupos com pendências) respeitando a hierarquia do usuário:
+ *       - ADMIN/GERENTE: todos os débitos. Aceitam ?grupo=X&distrito=Y para refinar.
+ *       - EMPRESARIA: débitos do distrito do consultor vinculado.
+ *       - LIDER: débitos do grupo do consultor vinculado.
+ *       - CONSULTOR: débitos do código do consultor vinculado.
+ *
+ *       Definições:
+ *       - **totalDebitos**: count de débitos com status PENDENTE ou ATRASADO.
+ *       - **valorTotal**: soma de (valor - paidAmount) dos débitos a receber.
+ *       - **consultoresAtraso**: count distinct de códigos de consultor com pelo menos 1 débito ATRASADO.
+ *       - **gruposAtivos**: count distinct de grupos com pelo menos 1 débito a receber.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: grupo
+ *         required: false
+ *         schema: { type: string }
+ *         description: Filtrar por grupo (apenas ADMIN/GERENTE)
+ *       - in: query
+ *         name: distrito
+ *         required: false
+ *         schema: { type: string }
+ *         description: Filtrar por distrito (apenas ADMIN/GERENTE)
+ *     responses:
+ *       200:
+ *         description: Métricas agregadas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalDebitos: { type: integer, example: 142 }
+ *                     valorTotal: { type: number, example: 12345.67 }
+ *                     consultoresAtraso: { type: integer, example: 18 }
+ *                     gruposAtivos: { type: integer, example: 7 }
+ *       401: { description: Não autenticado }
+ *       403: { description: Consultor não vinculado (roles hierárquicas) }
+ */
+router.get('/summary', (req: Request, res: Response, next: NextFunction) => debtController.getSummary(req, res, next));
+
+/**
+ * @swagger
  * /debts/{id}:
  *   get:
  *     tags: [Debts]

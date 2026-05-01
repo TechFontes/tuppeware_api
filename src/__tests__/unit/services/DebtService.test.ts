@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 
 vi.mock('../../../repositories/DebtRepository', () => ({
-  default: { findMany: vi.fn(), findById: vi.fn() },
+  default: { findMany: vi.fn(), findById: vi.fn(), summarize: vi.fn() },
 }));
 
 vi.mock('../../../repositories/ConsultantRepository', () => ({
@@ -384,6 +384,77 @@ describe('DebtService.authorizedFindById', () => {
 
     await expect(debtService.authorizedFindById('d1', { role: 'LIDER', cpf: '11144477735' }))
       .rejects.toMatchObject({ statusCode: 403 });
+  });
+});
+
+describe('DebtService.getSummary', () => {
+  const mockSummary = {
+    totalDebitos: 10,
+    valorTotal: 1234.56,
+    consultoresAtraso: 3,
+    gruposAtivos: 2,
+  };
+
+  beforeEach(() => {
+    vi.mocked(debtRepository.summarize).mockResolvedValue(mockSummary);
+  });
+
+  it('1. shape básico ADMIN: chama summarize com where {} e retorna shape correto', async () => {
+    const result = await debtService.getSummary({ role: 'ADMIN', cpf: '' }, {});
+    const call = vi.mocked(debtRepository.summarize).mock.calls[0][0];
+    expect(call).toEqual({});
+    expect(result).toEqual(mockSummary);
+    expect(typeof result.totalDebitos).toBe('number');
+    expect(typeof result.valorTotal).toBe('number');
+    expect(typeof result.consultoresAtraso).toBe('number');
+    expect(typeof result.gruposAtivos).toBe('number');
+  });
+
+  it('2. filtros grupo/distrito ADMIN: where inclui grupo e distrito', async () => {
+    await debtService.getSummary({ role: 'ADMIN', cpf: '' }, { grupo: 'G1', distrito: 'D1' });
+    const call = vi.mocked(debtRepository.summarize).mock.calls[0][0];
+    expect(call).toMatchObject({ grupo: 'G1', distrito: 'D1' });
+  });
+
+  it('3. CONSULTOR filtra por codigo do consultant vinculado', async () => {
+    vi.mocked(consultantRepository.findByCpf).mockResolvedValueOnce(mockConsultant as any);
+    await debtService.getSummary({ role: 'CONSULTOR', cpf: '11144477735' }, {});
+    const call = vi.mocked(debtRepository.summarize).mock.calls[0][0];
+    expect(call).toMatchObject({ codigo: 'C001' });
+  });
+
+  it('4. EMPRESARIA filtra por distrito do consultant vinculado', async () => {
+    vi.mocked(consultantRepository.findByCpf).mockResolvedValueOnce(mockConsultant as any);
+    await debtService.getSummary({ role: 'EMPRESARIA', cpf: '11144477735' }, {});
+    const call = vi.mocked(debtRepository.summarize).mock.calls[0][0];
+    expect(call).toMatchObject({ distrito: 'D1' });
+  });
+
+  it('5. LIDER filtra por grupo do consultant vinculado', async () => {
+    vi.mocked(consultantRepository.findByCpf).mockResolvedValueOnce(mockConsultant as any);
+    await debtService.getSummary({ role: 'LIDER', cpf: '11144477735' }, {});
+    const call = vi.mocked(debtRepository.summarize).mock.calls[0][0];
+    expect(call).toMatchObject({ grupo: 'G1' });
+  });
+
+  it('6. CONSULTOR sem consultor vinculado lança 403', async () => {
+    vi.mocked(consultantRepository.findByCpf).mockResolvedValueOnce(null);
+    await expect(debtService.getSummary({ role: 'CONSULTOR', cpf: '11144477735' }, {}))
+      .rejects.toMatchObject({ statusCode: StatusCodes.FORBIDDEN });
+  });
+
+  it('7. valores são propagados: retorna exatamente o que summarize retorna', async () => {
+    vi.mocked(debtRepository.summarize).mockResolvedValueOnce({
+      totalDebitos: 10,
+      valorTotal: 1234.56,
+      consultoresAtraso: 3,
+      gruposAtivos: 2,
+    });
+    const result = await debtService.getSummary({ role: 'ADMIN', cpf: '' }, {});
+    expect(result.totalDebitos).toBe(10);
+    expect(result.valorTotal).toBe(1234.56);
+    expect(result.consultoresAtraso).toBe(3);
+    expect(result.gruposAtivos).toBe(2);
   });
 });
 

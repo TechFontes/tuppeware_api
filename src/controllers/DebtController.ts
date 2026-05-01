@@ -25,6 +25,21 @@ class DebtController {
   }
 
   /**
+   * GET /api/debts/summary
+   * Retorna métricas agregadas de débitos para o dashboard.
+   */
+  async getSummary(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const user = await userService.findById(req.user!.id);
+      const summary = await debtService.getSummary(user, req.query as { grupo?: string; distrito?: string });
+
+      res.status(StatusCodes.OK).json({ status: 'success', data: summary });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * GET /api/debts/:id
    * Busca um débito pelo ID respeitando a hierarquia de acesso.
    */

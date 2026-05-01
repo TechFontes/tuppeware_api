@@ -61,6 +61,16 @@ class DebtService {
   }
 
   /**
+   * Retorna métricas agregadas de débitos respeitando a hierarquia do usuário.
+   * Mesma escope de visibilidade que `list`. Aceita querystring grupo/distrito
+   * apenas para ADMIN/GERENTE (refinamento de drill-down no dashboard).
+   */
+  async getSummary(user: DebtUser, query: { grupo?: string; distrito?: string }) {
+    const where = await this._buildWhereClause(user, query);
+    return await debtRepository.summarize(where);
+  }
+
+  /**
    * Busca um débito pelo ID.
    */
   async findById(id: string) {

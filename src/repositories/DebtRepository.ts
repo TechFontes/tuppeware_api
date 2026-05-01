@@ -91,6 +91,49 @@ class DebtRepository {
     });
     return result.count === 1;
   }
+
+  async summarize(where: Prisma.DebtWhereInput): Promise<{
+    totalDebitos: number;
+    valorTotal: number;
+    consultoresAtraso: number;
+    gruposAtivos: number;
+  }> {
+    const aReceberWhere: Prisma.DebtWhereInput = {
+      ...where,
+      status: { in: ['PENDENTE', 'ATRASADO'] },
+    };
+    const atrasadoWhere: Prisma.DebtWhereInput = {
+      ...where,
+      status: 'ATRASADO',
+    };
+
+    const [totalDebitos, aggregateValor, consultoresGroups, gruposGroups] = await Promise.all([
+      prisma.debt.count({ where: aReceberWhere }),
+      prisma.debt.aggregate({
+        where: aReceberWhere,
+        _sum: { valor: true, paidAmount: true },
+      }),
+      prisma.debt.groupBy({
+        by: ['codigo'],
+        where: atrasadoWhere,
+      }),
+      prisma.debt.groupBy({
+        by: ['grupo'],
+        where: aReceberWhere,
+      }),
+    ]);
+
+    const valorBruto = parseFloat((aggregateValor._sum.valor ?? 0).toString());
+    const paidBruto = parseFloat((aggregateValor._sum.paidAmount ?? 0).toString());
+    const valorTotal = Math.max(0, valorBruto - paidBruto);
+
+    return {
+      totalDebitos,
+      valorTotal,
+      consultoresAtraso: consultoresGroups.length,
+      gruposAtivos: gruposGroups.length,
+    };
+  }
 }
 
 export default new DebtRepository();
