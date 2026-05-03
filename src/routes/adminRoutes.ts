@@ -4,7 +4,13 @@ import adminController from '../controllers/AdminController';
 import { authMiddleware } from '../middlewares/authMiddleware';
 import { roleMiddleware } from '../middlewares/roleMiddleware';
 import { requirePermission } from '../middlewares/permissionMiddleware';
-import { csvUploadValidator } from '../validators/adminValidator';
+import {
+  csvUploadValidator,
+  createManagerValidator,
+  createDebtValidator,
+  updateDebtStatusValidator,
+} from '../validators/adminValidator';
+import { validate } from '../validators/validationMiddleware';
 import { AdminPermission } from '../types/permissions';
 
 const router = Router();
@@ -568,6 +574,8 @@ router.get(
 router.post(
   '/managers',
   requirePermission(AdminPermission.ADMINS_MANAGE),
+  createManagerValidator,
+  validate,
   (req: Request, res: Response, next: NextFunction) => adminController.createManager(req, res, next),
 );
 
@@ -906,6 +914,8 @@ router.put(
 router.post(
   '/debts',
   requirePermission(AdminPermission.DEBTS_MANAGE),
+  createDebtValidator,
+  validate,
   (req: Request, res: Response, next: NextFunction) => adminController.createDebt(req, res, next),
 );
 
@@ -960,6 +970,8 @@ router.post(
 router.patch(
   '/debts/:id/status',
   requirePermission(AdminPermission.DEBTS_MANAGE),
+  updateDebtStatusValidator,
+  validate,
   (req: Request, res: Response, next: NextFunction) => adminController.updateDebtStatus(req, res, next),
 );
 
