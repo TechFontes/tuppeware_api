@@ -612,24 +612,185 @@ router.put(
 // Debts — ADMIN + GERENTE
 // ============================================================
 
+/**
+ * @swagger
+ * /admin/debts:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Criar débito manualmente
+ *     description: Cria um débito avulso sem importação CSV. Útil para lançamentos pontuais.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [codigo, nome, valor, dataVencimento, numeroNf]
+ *             properties:
+ *               codigo:
+ *                 type: string
+ *                 example: '001234'
+ *                 description: Código da consultora
+ *               nome: { type: string, example: 'Maria Silva' }
+ *               grupo: { type: string, example: 'G01' }
+ *               distrito: { type: string, example: 'D01' }
+ *               semana: { type: string, example: '2025-01' }
+ *               valor:
+ *                 type: number
+ *                 format: decimal
+ *                 example: 250.00
+ *               dataVencimento:
+ *                 type: string
+ *                 format: date-time
+ *                 example: '2025-06-30T00:00:00.000Z'
+ *               numeroNf:
+ *                 type: string
+ *                 example: 'NF-2025-001'
+ *                 description: Número da nota fiscal (chave única)
+ *               status:
+ *                 $ref: '#/components/schemas/DebtStatus'
+ *     responses:
+ *       201:
+ *         description: Débito criado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data: { $ref: '#/components/schemas/Debt' }
+ *       400:
+ *         description: Dados inválidos ou numeroNf duplicado
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       401: { description: Não autenticado }
+ *       403: { description: Sem permissão debts.manage }
+ */
 router.post(
   '/debts',
   requirePermission(AdminPermission.DEBTS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.createDebt(req, res, next),
 );
 
+/**
+ * @swagger
+ * /admin/debts/{id}/status:
+ *   patch:
+ *     tags: [Admin]
+ *     summary: Atualizar status de um débito
+ *     description: Altera manualmente o status de um débito. Útil para correções operacionais.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: ID do débito
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status:
+ *                 $ref: '#/components/schemas/DebtStatus'
+ *     responses:
+ *       200:
+ *         description: Status atualizado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data: { $ref: '#/components/schemas/Debt' }
+ *       400:
+ *         description: Status inválido
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       401: { description: Não autenticado }
+ *       403: { description: Sem permissão debts.manage }
+ *       404:
+ *         description: Débito não encontrado
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ */
 router.patch(
   '/debts/:id/status',
   requirePermission(AdminPermission.DEBTS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.updateDebtStatus(req, res, next),
 );
 
+/**
+ * @swagger
+ * /admin/debts/weekly:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Listar débitos da semana
+ *     description: Retorna todos os débitos de uma semana específica. Se semana não informada, usa a semana atual.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: semana
+ *         required: false
+ *         schema: { type: string, example: '2025-01' }
+ *         description: Código da semana no formato YYYY-WW. Se omitido, usa semana corrente.
+ *     responses:
+ *       200:
+ *         description: Débitos da semana
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 total: { type: integer, example: 48 }
+ *                 data:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/Debt' }
+ *       401: { description: Não autenticado }
+ *       403: { description: Sem permissão debts.manage }
+ */
 router.get(
   '/debts/weekly',
   requirePermission(AdminPermission.DEBTS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.getWeeklyDebts(req, res, next),
 );
 
+/**
+ * @swagger
+ * /admin/debts/paid-today:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Débitos pagos hoje
+ *     description: Retorna todos os débitos cujo status foi alterado para PAGO no dia corrente.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Débitos pagos no dia
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 total: { type: integer, example: 12 }
+ *                 data:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/Debt' }
+ *       401: { description: Não autenticado }
+ *       403: { description: Sem permissão debts.manage }
+ */
 router.get(
   '/debts/paid-today',
   requirePermission(AdminPermission.DEBTS_MANAGE),
@@ -640,12 +801,96 @@ router.get(
 // Clients — ADMIN + GERENTE
 // ============================================================
 
+/**
+ * @swagger
+ * /admin/clients:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Listar consultoras (clientes ativos)
+ *     description: |
+ *       Lista usuários ativos com dados de consultor vinculado (grupo, distrito, código).
+ *       Filtrável por grupo e distrito. Resultado paginado.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: grupo
+ *         schema: { type: string }
+ *         description: Filtrar por grupo
+ *       - in: query
+ *         name: distrito
+ *         schema: { type: string }
+ *         description: Filtrar por distrito
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *         description: Número da página
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *         description: Itens por página
+ *     responses:
+ *       200:
+ *         description: Lista paginada de consultoras ativas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - type: object
+ *                   properties:
+ *                     status: { type: string, example: success }
+ *                 - $ref: '#/components/schemas/PaginatedResponse'
+ *       401: { description: Não autenticado }
+ *       403: { description: Sem permissão users.manage }
+ */
 router.get(
   '/clients',
   requirePermission(AdminPermission.USERS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.listClients(req, res, next),
 );
 
+/**
+ * @swagger
+ * /admin/clients/{id}:
+ *   patch:
+ *     tags: [Admin]
+ *     summary: Atualizar grupo/distrito de uma consultora
+ *     description: Atualiza os dados de vínculo (grupo e/ou distrito) do consultor associado ao usuário.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: ID do usuário (não do consultor)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               grupo: { type: string, example: 'G02' }
+ *               distrito: { type: string, example: 'D02' }
+ *     responses:
+ *       200:
+ *         description: Dados de vínculo atualizados
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data: { $ref: '#/components/schemas/User' }
+ *       401: { description: Não autenticado }
+ *       403: { description: Sem permissão users.manage }
+ *       404:
+ *         description: Usuário ou consultor vinculado não encontrado
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ */
 router.patch(
   '/clients/:id',
   requirePermission(AdminPermission.USERS_MANAGE),
@@ -656,6 +901,53 @@ router.patch(
 // Organization — ADMIN + GERENTE
 // ============================================================
 
+/**
+ * @swagger
+ * /admin/organization:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Visão organizacional (consultoras com vínculos)
+ *     description: |
+ *       Retorna a estrutura organizacional de consultoras com seus dados de grupo e distrito.
+ *       Útil para visualização hierárquica no painel admin.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: grupo
+ *         schema: { type: string }
+ *         description: Filtrar por grupo
+ *       - in: query
+ *         name: distrito
+ *         schema: { type: string }
+ *         description: Filtrar por distrito
+ *     responses:
+ *       200:
+ *         description: Lista de consultoras com dados organizacionais
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string, format: uuid }
+ *                       codigo: { type: string }
+ *                       tipo:
+ *                         type: integer
+ *                         enum: [1, 2, 3]
+ *                         description: '1=Empresária 2=Líder 3=Consultor'
+ *                       grupo: { type: string }
+ *                       distrito: { type: string }
+ *                       cpf: { type: string }
+ *                       userId: { type: string, format: uuid, nullable: true }
+ *       401: { description: Não autenticado }
+ *       403: { description: Sem permissão users.manage }
+ */
 router.get(
   '/organization',
   requirePermission(AdminPermission.USERS_MANAGE),
@@ -666,6 +958,46 @@ router.get(
 // Reports — ADMIN + GERENTE
 // ============================================================
 
+/**
+ * @swagger
+ * /admin/reports/paid-documents:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Relatório de documentos pagos
+ *     description: |
+ *       Lista pagamentos concluídos (status PAGO) com os débitos vinculados, filtráveis por período.
+ *       Destinado a exportação/conciliação financeira.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dataInicio
+ *         schema: { type: string, format: date, example: '2025-01-01' }
+ *         description: Data inicial do período (ISO 8601 date)
+ *       - in: query
+ *         name: dataFim
+ *         schema: { type: string, format: date, example: '2025-01-31' }
+ *         description: Data final do período (ISO 8601 date)
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200:
+ *         description: Documentos pagos no período
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - type: object
+ *                   properties:
+ *                     status: { type: string, example: success }
+ *                 - $ref: '#/components/schemas/PaginatedResponse'
+ *       401: { description: Não autenticado }
+ *       403: { description: Sem permissão reports.view }
+ */
 router.get(
   '/reports/paid-documents',
   requirePermission(AdminPermission.REPORTS_VIEW),
