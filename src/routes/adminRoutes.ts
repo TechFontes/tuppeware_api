@@ -361,6 +361,13 @@ router.get(
  *   post:
  *     tags: [Admin]
  *     summary: Criar usuário ADMIN (GERENTE only)
+ *     description: |
+ *       Cria um novo usuário com role ADMIN. Aceita opcionalmente `jobTitle`
+ *       (cargo informativo) e `permissions` (array de permissões granulares).
+ *
+ *       Regras de permissão (anti-escalada):
+ *       - Caller não pode conceder permissão que ele mesmo não possui
+ *       - `admins.manage` só pode ser concedida por GERENTE
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -377,11 +384,38 @@ router.get(
  *                 type: string
  *               email:
  *                 type: string
+ *                 format: email
  *               password:
  *                 type: string
+ *                 format: password
+ *                 minLength: 8
+ *               jobTitle:
+ *                 type: string
+ *                 example: "Coordenadora"
+ *                 description: Cargo livre (informativo, não afeta permissões)
+ *               permissions:
+ *                 type: array
+ *                 description: Permissões granulares iniciais (opcional; padrão vazio)
+ *                 items:
+ *                   type: string
+ *                   enum:
+ *                     - users.manage
+ *                     - debts.manage
+ *                     - payments.manage
+ *                     - reports.view
+ *                     - reports.export
+ *                     - settings.manage
+ *                     - admins.manage
+ *                     - transactions.approve
  *     responses:
  *       201:
  *         description: ADMIN criado
+ *       400:
+ *         description: Dados inválidos
+ *       403:
+ *         description: Sem admins.manage / anti-escalada / admins.manage só GERENTE
+ *       409:
+ *         description: CPF ou e-mail já cadastrado
  */
 router.post(
   '/managers',
@@ -468,6 +502,9 @@ router.put(
  *   put:
  *     tags: [Admin]
  *     summary: Editar ADMIN (GERENTE only)
+ *     description: |
+ *       Atualiza dados pessoais de um usuário ADMIN: nome, e-mail e cargo.
+ *       Para editar permissões granulares, use `PUT /admin/managers/:id/permissions`.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -487,9 +524,20 @@ router.put(
  *                 type: string
  *               email:
  *                 type: string
+ *                 format: email
+ *               jobTitle:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Cargo livre (informativo, não afeta permissões)
  *     responses:
  *       200:
  *         description: ADMIN atualizado
+ *       400:
+ *         description: Dados inválidos
+ *       403:
+ *         description: Acesso negado (requer admins.manage)
+ *       404:
+ *         description: ADMIN não encontrado
  */
 router.put(
   '/managers/:id',

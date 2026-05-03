@@ -24,6 +24,10 @@ router.use(authMiddleware);
  *       - `partialPaymentEnabled` (boolean) — feature flag de pagamento parcial
  *       - `partialPaymentMinAmount` (string | null) — valor mínimo por parcial
  *       - `partialPaymentMinRemaining` (string | null) — valor mínimo restante após parcial
+ *
+ *       Para usuários com role ADMIN, os campos `jobTitle` e `permissions` são
+ *       retornados no objeto `data`. Para demais roles, `permissions` é array vazio
+ *       e `jobTitle` é null.
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -46,6 +50,25 @@ router.use(authMiddleware);
  *                       type: string
  *                     role:
  *                       type: string
+ *                     jobTitle:
+ *                       type: string
+ *                       nullable: true
+ *                       example: "Coordenadora de Cobrança"
+ *                     permissions:
+ *                       type: array
+ *                       description: Permissões granulares ADM (vazio para roles não-admin)
+ *                       items:
+ *                         type: string
+ *                         enum:
+ *                           - users.manage
+ *                           - debts.manage
+ *                           - payments.manage
+ *                           - reports.view
+ *                           - reports.export
+ *                           - settings.manage
+ *                           - admins.manage
+ *                           - transactions.approve
+ *                       example: ["users.manage", "debts.manage"]
  *                     settings:
  *                       type: object
  *                       properties:
