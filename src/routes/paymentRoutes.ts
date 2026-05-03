@@ -14,6 +14,7 @@ const router = Router();
  *   post:
  *     tags: [Payments]
  *     summary: Callback assíncrono da eRede
+ *     security: []
  *     description: Endpoint usado pela eRede para atualização de status da transação.
  *     requestBody:
  *       required: true

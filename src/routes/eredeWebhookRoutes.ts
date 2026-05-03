@@ -9,6 +9,7 @@ const router = Router();
  *   post:
  *     tags: [eRede]
  *     summary: Webhook da eRede (sem autenticação JWT)
+ *     security: []
  *     description: |
  *       Endpoint chamado pelo gateway eRede para notificar eventos de
  *       tokenização (PV.TOKENIZACAO-*) e transação (PV.TRANSACAO-*).

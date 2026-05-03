@@ -12,11 +12,19 @@ const options: swaggerJsdoc.Options = {
       },
     },
     servers: [
-      {
-        url: '/api',
-        description: 'API Base',
-      },
+      { url: '/api', description: 'Servidor local / desenvolvimento' },
+      { url: 'https://api.tupperwarees.com.br/api', description: 'Produção' },
     ],
+    tags: [
+      { name: 'Auth', description: 'Autenticação e recuperação de senha' },
+      { name: 'Users', description: 'Perfil do usuário autenticado e cartões salvos (Cofre eRede)' },
+      { name: 'Debts', description: 'Consulta e listagem de débitos' },
+      { name: 'Payments', description: 'Criação de pagamentos (PIX e cartão de crédito)' },
+      { name: 'Payment History', description: 'Histórico e reabertura de links de pagamento' },
+      { name: 'Admin', description: 'Gestão administrativa — requer permissão granular ou role ADMIN/GERENTE' },
+      { name: 'eRede', description: 'Webhooks do gateway eRede (tokenização e transação)' },
+    ],
+    security: [{ bearerAuth: [] }],
     components: {
       securitySchemes: {
         bearerAuth: {

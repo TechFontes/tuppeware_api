@@ -16,6 +16,7 @@ const router = Router();
  *   post:
  *     tags: [Auth]
  *     summary: Cadastrar novo usuário
+ *     security: []
  *     description: Registra um novo usuário no sistema. Se existir um consultor com o mesmo CPF, o vínculo é feito automaticamente.
  *     requestBody:
  *       required: true
@@ -66,6 +67,7 @@ router.post('/register', registerValidator, validate, (req: Request, res: Respon
  *   post:
  *     tags: [Auth]
  *     summary: Realizar login
+ *     security: []
  *     description: Autentica o usuário e retorna um token JWT.
  *     requestBody:
  *       required: true
@@ -110,6 +112,7 @@ router.post('/login', loginValidator, validate, (req: Request, res: Response, ne
  *   post:
  *     tags: [Auth]
  *     summary: Solicitar recuperação de senha
+ *     security: []
  *     description: Envia um e-mail com link para redefinição de senha.
  *     requestBody:
  *       required: true
@@ -141,6 +144,7 @@ router.post('/forgot-password', forgotPasswordValidator, validate, (req: Request
  *   post:
  *     tags: [Auth]
  *     summary: Redefinir senha
+ *     security: []
  *     description: Redefine a senha do usuário usando o token recebido por e-mail.
  *     requestBody:
  *       required: true
