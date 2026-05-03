@@ -7,7 +7,7 @@ import debtService from '../services/DebtService';
 import paymentService from '../services/PaymentService';
 import settingsService from '../services/SettingsService';
 import type { UserRole, Prisma } from '../../generated/prisma/client';
-import type { AdminPermission } from '../types/permissions';
+import { PERMISSION_CATALOG, type AdminPermission } from '../types/permissions';
 
 function getPagination(query: Record<string, unknown>) {
   const page = Math.max(1, parseInt(String(query.page || '1')));
@@ -221,6 +221,21 @@ class AdminController {
       const manager = await userService.updateAdmin(String(req.params.id), { name, email, jobTitle });
 
       res.status(StatusCodes.OK).json({ status: 'success', data: manager });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Permissions Catalog
+  // -----------------------------------------------------------------------
+
+  /**
+   * GET /api/admin/permissions/catalog
+   */
+  async getPermissionsCatalog(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.status(StatusCodes.OK).json({ status: 'success', data: PERMISSION_CATALOG });
     } catch (error) {
       next(error);
     }

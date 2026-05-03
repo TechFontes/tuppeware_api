@@ -152,3 +152,42 @@ describe('AdminController.createManager', () => {
     );
   });
 });
+
+// ------------------------------------------------ getPermissionsCatalog
+describe('AdminController.getPermissionsCatalog', () => {
+  it('retorna o PERMISSION_CATALOG com 8 entries', async () => {
+    const req: any = { user: { id: 'u1', role: 'ADMIN', email: 'a@a.com' } };
+    const res = makeRes();
+
+    await adminController.getPermissionsCatalog(req, res, vi.fn());
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    const jsonArg = vi.mocked(res.json).mock.calls[0][0] as any;
+    expect(jsonArg.status).toBe('success');
+    expect(Array.isArray(jsonArg.data)).toBe(true);
+    expect(jsonArg.data).toHaveLength(8);
+    jsonArg.data.forEach((entry: any) => {
+      expect(entry.key).toMatch(/^[a-z]+\.[a-z]+$/);
+      expect(typeof entry.labelPt).toBe('string');
+      expect(typeof entry.description).toBe('string');
+    });
+  });
+
+  it('inclui as 8 chaves esperadas', async () => {
+    const req: any = { user: { id: 'u1', role: 'ADMIN', email: 'a@a.com' } };
+    const res = makeRes();
+
+    await adminController.getPermissionsCatalog(req, res, vi.fn());
+
+    const jsonArg = vi.mocked(res.json).mock.calls[0][0] as any;
+    const keys = jsonArg.data.map((e: any) => e.key);
+    expect(keys).toContain('users.manage');
+    expect(keys).toContain('debts.manage');
+    expect(keys).toContain('payments.manage');
+    expect(keys).toContain('reports.view');
+    expect(keys).toContain('reports.export');
+    expect(keys).toContain('settings.manage');
+    expect(keys).toContain('admins.manage');
+    expect(keys).toContain('transactions.approve');
+  });
+});

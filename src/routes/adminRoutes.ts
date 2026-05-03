@@ -306,6 +306,50 @@ router.get(
 );
 
 // ============================================================
+// Permissions Catalog — ADMIN + GERENTE
+// ============================================================
+
+/**
+ * @swagger
+ * /admin/permissions/catalog:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Catálogo de permissões granulares ADM
+ *     description: |
+ *       Retorna o conjunto fechado das 8 permissões granulares disponíveis para
+ *       usuários ADMIN. Frontend usa pra renderizar checkboxes do form de
+ *       criação/edição de ADMs sem hardcodar as chaves.
+ *
+ *       Não exige permissão granular específica — apenas role ADMIN ou GERENTE.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Catálogo com 8 entries
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       key: { type: string, example: users.manage }
+ *                       labelPt: { type: string, example: Gerenciar Usuários }
+ *                       description: { type: string }
+ *       401: { description: Não autenticado }
+ *       403: { description: Role insuficiente }
+ */
+router.get(
+  '/permissions/catalog',
+  roleMiddleware('ADMIN', 'GERENTE'),
+  (req: Request, res: Response, next: NextFunction) => adminController.getPermissionsCatalog(req, res, next),
+);
+
+// ============================================================
 // Manager Management — GERENTE only
 // ============================================================
 
