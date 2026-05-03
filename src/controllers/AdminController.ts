@@ -7,6 +7,7 @@ import debtService from '../services/DebtService';
 import paymentService from '../services/PaymentService';
 import settingsService from '../services/SettingsService';
 import type { UserRole, Prisma } from '../../generated/prisma/client';
+import type { AdminPermission } from '../types/permissions';
 
 function getPagination(query: Record<string, unknown>) {
   const page = Math.max(1, parseInt(String(query.page || '1')));
@@ -177,8 +178,19 @@ class AdminController {
    */
   async createManager(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { name, cpf, email, password } = req.body as Record<string, string>;
-      const manager = await userService.createAdmin({ name, cpf, email, password });
+      const { name, cpf, email, password, jobTitle, permissions } = req.body as {
+        name: string;
+        cpf: string;
+        email: string;
+        password: string;
+        jobTitle?: string;
+        permissions?: string[];
+      };
+
+      const manager = await userService.createAdmin(
+        { name, cpf, email, password, jobTitle, permissions: permissions as AdminPermission[] | undefined },
+        { id: req.user!.id, role: req.user!.role },
+      );
 
       res.status(StatusCodes.CREATED).json({ status: 'success', data: manager });
     } catch (error) {

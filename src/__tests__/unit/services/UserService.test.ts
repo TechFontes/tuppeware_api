@@ -11,6 +11,7 @@ vi.mock('../../../repositories/UserRepository', () => ({
     create: vi.fn(),
     update: vi.fn(),
     softDelete: vi.fn(),
+    findPermissionsById: vi.fn(),
   },
 }));
 
@@ -51,6 +52,8 @@ const makeUser = (overrides: Record<string, unknown> = {}) => ({
   state: null,
   postalCode: null,
   consultant: null,
+  jobTitle: null,
+  permissions: [],
   createdAt: new Date(),
   updatedAt: new Date(),
   ...overrides,
@@ -230,16 +233,18 @@ describe('UserService.getUserPayments', () => {
 
 // --------------------------------------------------------------- createAdmin
 describe('UserService.createAdmin', () => {
+  const gerenteCaller = { id: 'gerente-1', role: 'GERENTE' };
+
   it('lança 409 quando e-mail já está cadastrado', async () => {
     vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(makeUser() as any);
-    await expect(userService.createAdmin({ name: 'Admin', cpf: '11144477735', email: 'test@email.com', password: 'Senha@123' }))
+    await expect(userService.createAdmin({ name: 'Admin', cpf: '11144477735', email: 'test@email.com', password: 'Senha@123' }, gerenteCaller))
       .rejects.toMatchObject({ statusCode: StatusCodes.CONFLICT });
   });
 
   it('cria usuário com role=ADMIN e retorna sem password', async () => {
     vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(null);
     vi.mocked(userRepository.create).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
-    const result = await userService.createAdmin({ name: 'Admin', cpf: '11144477735', email: 'novo@email.com', password: 'Senha@123' });
+    const result = await userService.createAdmin({ name: 'Admin', cpf: '11144477735', email: 'novo@email.com', password: 'Senha@123' }, gerenteCaller);
     const createCall = vi.mocked(userRepository.create).mock.calls[0][0];
     expect(createCall.role).toBe('ADMIN');
     expect((result as any).password).toBeUndefined();
@@ -248,10 +253,143 @@ describe('UserService.createAdmin', () => {
   it('senha é hashada com bcrypt antes de criar', async () => {
     vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(null);
     vi.mocked(userRepository.create).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
-    await userService.createAdmin({ name: 'Admin', cpf: '11144477735', email: 'novo@email.com', password: 'Senha@123' });
+    await userService.createAdmin({ name: 'Admin', cpf: '11144477735', email: 'novo@email.com', password: 'Senha@123' }, gerenteCaller);
     const createCall = vi.mocked(userRepository.create).mock.calls[0][0];
     expect(createCall.password).not.toBe('Senha@123');
     expect(createCall.password).toMatch(/^\$2[ab]\$/);
+  });
+});
+
+// ------- createAdmin com permissions e anti-escalada
+describe('UserService.createAdmin (com permissions e anti-escalada)', () => {
+  const gerenteCaller = { id: 'gerente-1', role: 'GERENTE' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('aceita permissions array vazio quando não fornecido (default)', async () => {
+    vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(null);
+    vi.mocked(userRepository.create).mockResolvedValueOnce(makeUser({ role: 'ADMIN', permissions: [] }) as any);
+
+    await userService.createAdmin(
+      { name: 'Admin', cpf: '11144477735', email: 'a@a.com', password: 'Senha@123' },
+      gerenteCaller,
+    );
+
+    const createCall = vi.mocked(userRepository.create).mock.calls[0][0];
+    expect(createCall.permissions).toEqual([]);
+  });
+
+  it('persiste permissions quando fornecidas (GERENTE caller)', async () => {
+    vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(null);
+    vi.mocked(userRepository.create).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+
+    await userService.createAdmin(
+      { name: 'Admin', cpf: '11144477735', email: 'a@a.com', password: 'Senha@123', permissions: ['users.manage', 'debts.manage'] as any },
+      gerenteCaller,
+    );
+
+    const createCall = vi.mocked(userRepository.create).mock.calls[0][0];
+    expect(createCall.permissions).toEqual(['users.manage', 'debts.manage']);
+  });
+
+  it('persiste jobTitle quando fornecido', async () => {
+    vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(null);
+    vi.mocked(userRepository.create).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+
+    await userService.createAdmin(
+      { name: 'Admin', cpf: '11144477735', email: 'a@a.com', password: 'Senha@123', jobTitle: 'Coordenadora' },
+      gerenteCaller,
+    );
+
+    const createCall = vi.mocked(userRepository.create).mock.calls[0][0];
+    expect(createCall.jobTitle).toBe('Coordenadora');
+  });
+
+  it('lança 400 quando permissão inválida fornecida', async () => {
+    vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(null);
+
+    await expect(userService.createAdmin(
+      { name: 'X', cpf: '11144477735', email: 'a@a.com', password: 'Senha@123', permissions: ['foo.bar'] as any },
+      gerenteCaller,
+    )).rejects.toMatchObject({
+      statusCode: StatusCodes.BAD_REQUEST,
+      message: expect.stringContaining('foo.bar'),
+    });
+  });
+
+  it('deduplica permissões repetidas no array', async () => {
+    vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(null);
+    vi.mocked(userRepository.create).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+
+    await userService.createAdmin(
+      { name: 'A', cpf: '11144477735', email: 'a@a.com', password: 'Senha@123', permissions: ['users.manage', 'users.manage', 'debts.manage'] as any },
+      gerenteCaller,
+    );
+
+    const createCall = vi.mocked(userRepository.create).mock.calls[0][0];
+    expect(createCall.permissions).toEqual(['users.manage', 'debts.manage']);
+  });
+
+  it('caller ADMIN com perms parciais NÃO consegue criar ADM com perms que ele não tem', async () => {
+    const adminCaller = { id: 'admin-caller', role: 'ADMIN' };
+    vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(null);
+    vi.mocked(userRepository.findPermissionsById).mockResolvedValueOnce({
+      id: 'admin-caller', role: 'ADMIN', permissions: ['users.manage'],
+    } as any);
+
+    await expect(userService.createAdmin(
+      { name: 'X', cpf: '11144477735', email: 'a@a.com', password: 'Senha@123', permissions: ['users.manage', 'settings.manage'] as any },
+      adminCaller,
+    )).rejects.toMatchObject({
+      statusCode: StatusCodes.FORBIDDEN,
+      message: expect.stringContaining('settings.manage'),
+    });
+  });
+
+  it('caller ADMIN consegue criar ADM com subset das suas próprias perms', async () => {
+    const adminCaller = { id: 'admin-caller', role: 'ADMIN' };
+    vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(null);
+    vi.mocked(userRepository.findPermissionsById).mockResolvedValueOnce({
+      id: 'admin-caller', role: 'ADMIN', permissions: ['users.manage', 'debts.manage', 'settings.manage'],
+    } as any);
+    vi.mocked(userRepository.create).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+
+    await userService.createAdmin(
+      { name: 'X', cpf: '11144477735', email: 'a@a.com', password: 'Senha@123', permissions: ['users.manage'] as any },
+      adminCaller,
+    );
+
+    expect(userRepository.create).toHaveBeenCalled();
+  });
+
+  it('caller ADMIN com admins.manage NÃO consegue conceder admins.manage a outro', async () => {
+    const adminCaller = { id: 'admin-caller', role: 'ADMIN' };
+    vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(null);
+    vi.mocked(userRepository.findPermissionsById).mockResolvedValueOnce({
+      id: 'admin-caller', role: 'ADMIN', permissions: ['admins.manage'],
+    } as any);
+
+    await expect(userService.createAdmin(
+      { name: 'X', cpf: '11144477735', email: 'a@a.com', password: 'Senha@123', permissions: ['admins.manage'] as any },
+      adminCaller,
+    )).rejects.toMatchObject({
+      statusCode: StatusCodes.FORBIDDEN,
+      message: expect.stringContaining('admins.manage'),
+    });
+  });
+
+  it('GERENTE concede admins.manage normalmente', async () => {
+    vi.mocked(userRepository.findByEmail).mockResolvedValueOnce(null);
+    vi.mocked(userRepository.create).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+
+    await userService.createAdmin(
+      { name: 'X', cpf: '11144477735', email: 'a@a.com', password: 'Senha@123', permissions: ['admins.manage'] as any },
+      gerenteCaller,
+    );
+
+    expect(userRepository.create).toHaveBeenCalled();
   });
 });
 

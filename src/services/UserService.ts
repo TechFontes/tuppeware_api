@@ -6,6 +6,7 @@ import paymentRepository from '../repositories/PaymentRepository';
 import consultantRepository from '../repositories/ConsultantRepository';
 import type { Prisma, UserRole } from '../../generated/prisma/client';
 import type { PaginationParams } from '../types';
+import { isValidPermission, type AdminPermission } from '../types/permissions';
 
 interface ListUsersFilters {
   role?: UserRole;
@@ -156,11 +157,57 @@ class UserService {
     });
   }
 
-  async createAdmin(data: { name: string; cpf: string; email: string; password: string }) {
+  async createAdmin(
+    data: {
+      name: string;
+      cpf: string;
+      email: string;
+      password: string;
+      jobTitle?: string;
+      permissions?: AdminPermission[];
+    },
+    caller: { id: string; role: string },
+  ) {
     const existing = await userRepository.findByEmail(data.email);
 
     if (existing) {
       throw new AppError('E-mail já cadastrado.', StatusCodes.CONFLICT);
+    }
+
+    // Validar e dedup permissões
+    const requestedPerms = [...new Set(data.permissions ?? [])] as AdminPermission[];
+
+    for (const perm of requestedPerms) {
+      if (!isValidPermission(perm)) {
+        throw new AppError(
+          `Permissão inválida: ${perm}.`,
+          StatusCodes.BAD_REQUEST,
+        );
+      }
+    }
+
+    // admins.manage só GERENTE concede
+    if (requestedPerms.includes('admins.manage' as AdminPermission) && caller.role !== 'GERENTE') {
+      throw new AppError(
+        'Apenas GERENTE pode conceder a permissão admins.manage.',
+        StatusCodes.FORBIDDEN,
+      );
+    }
+
+    // Anti-escalada (não aplica a GERENTE)
+    if (caller.role !== 'GERENTE' && requestedPerms.length > 0) {
+      const callerData = await userRepository.findPermissionsById(caller.id);
+      const callerPerms = Array.isArray(callerData?.permissions)
+        ? (callerData.permissions as string[])
+        : [];
+
+      const illegal = requestedPerms.filter((p) => !callerPerms.includes(p));
+      if (illegal.length > 0) {
+        throw new AppError(
+          `Você não pode conceder permissões que você mesmo não possui: ${illegal.join(', ')}.`,
+          StatusCodes.FORBIDDEN,
+        );
+      }
     }
 
     const hashedPassword = await bcrypt.hash(data.password, 10);
@@ -171,6 +218,8 @@ class UserService {
       email: data.email,
       password: hashedPassword,
       role: 'ADMIN',
+      jobTitle: data.jobTitle,
+      permissions: requestedPerms,
     });
 
     const { password: _, ...sanitized } = user;

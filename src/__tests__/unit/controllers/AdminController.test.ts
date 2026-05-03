@@ -113,3 +113,22 @@ describe('AdminController.updateUser — whitelist de campos', () => {
     expect(String(passedData.password).startsWith('$2')).toBe(true);
   });
 });
+
+// ---------------------------------------------------------- createManager
+describe('AdminController.createManager', () => {
+  it('createManager passa caller (req.user) como 2º arg para userService', async () => {
+    vi.mocked(userService.createAdmin).mockResolvedValueOnce({ id: 'm1' } as any);
+    const req: any = {
+      user: { id: 'caller-1', role: 'GERENTE', email: 'g@g.com' },
+      body: { name: 'X', cpf: '111', email: 'x@x.com', password: 'p', permissions: ['users.manage'] },
+    };
+    const res = makeRes();
+
+    await adminController.createManager(req, res, vi.fn());
+
+    expect(userService.createAdmin).toHaveBeenCalledWith(
+      expect.objectContaining({ permissions: ['users.manage'] }),
+      { id: 'caller-1', role: 'GERENTE' },
+    );
+  });
+});
