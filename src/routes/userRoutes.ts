@@ -58,16 +58,7 @@ router.use(authMiddleware);
  *                       type: array
  *                       description: Permissões granulares ADM (vazio para roles não-admin)
  *                       items:
- *                         type: string
- *                         enum:
- *                           - users.manage
- *                           - debts.manage
- *                           - payments.manage
- *                           - reports.view
- *                           - reports.export
- *                           - settings.manage
- *                           - admins.manage
- *                           - transactions.approve
+ *                         $ref: '#/components/schemas/AdminPermission'
  *                       example: ["users.manage", "debts.manage"]
  *                     settings:
  *                       type: object
@@ -204,7 +195,8 @@ router.put(
  *                   type: object
  *                   properties:
  *                     id: { type: string }
- *                     status: { type: string, enum: [PENDING, ACTIVE, INACTIVE, FAILED] }
+ *                     status:
+ *                       $ref: '#/components/schemas/SavedCardStatus'
  *                     cardBrand: { type: string, nullable: true }
  *                     lastFour: { type: string }
  *                     holderName: { type: string }

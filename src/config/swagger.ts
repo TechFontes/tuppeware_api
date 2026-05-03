@@ -35,6 +35,58 @@ const options: swaggerJsdoc.Options = {
         },
       },
       schemas: {
+        UserRole: {
+          type: 'string',
+          enum: ['ADMIN', 'GERENTE', 'EMPRESARIA', 'LIDER', 'CONSULTOR'],
+          description: 'Papel do usuário no sistema',
+        },
+        DebtStatus: {
+          type: 'string',
+          enum: ['PENDENTE', 'ATRASADO', 'PAGO'],
+          description: 'Status do débito',
+        },
+        PaymentStatus: {
+          type: 'string',
+          enum: ['PENDENTE', 'PAGO', 'CANCELADO'],
+          description: 'Status do pagamento',
+        },
+        PaymentMethod: {
+          type: 'string',
+          enum: ['PIX', 'CARTAO_CREDITO'],
+          description: 'Método de pagamento',
+        },
+        SavedCardStatus: {
+          type: 'string',
+          enum: ['PENDING', 'ACTIVE', 'INACTIVE', 'FAILED'],
+          description: 'Status da tokenização do cartão no Cofre eRede',
+        },
+        AdminPermission: {
+          type: 'string',
+          enum: [
+            'users.manage',
+            'debts.manage',
+            'payments.manage',
+            'reports.view',
+            'reports.export',
+            'settings.manage',
+            'admins.manage',
+            'transactions.approve',
+          ],
+          description: 'Chave de permissão granular para usuários ADMIN',
+        },
+        PermissionCatalogEntry: {
+          type: 'object',
+          properties: {
+            key: { $ref: '#/components/schemas/AdminPermission' },
+            labelPt: { type: 'string', example: 'Gerenciar Usuários' },
+            description: { type: 'string', example: 'Criar, editar e excluir usuários consultores/líderes' },
+          },
+        },
+        EredeWebhookEventType: {
+          type: 'string',
+          enum: ['TOKENIZATION', 'TRANSACTION'],
+          description: 'Categoria interna do evento (mapeada a partir do eventType string da eRede)',
+        },
         RegisterDTO: {
           type: 'object',
           required: ['name', 'cpf', 'email', 'password'],
@@ -79,9 +131,7 @@ const options: swaggerJsdoc.Options = {
               description: 'IDs dos débitos a serem pagos',
             },
             method: {
-              type: 'string',
-              enum: ['PIX', 'CARTAO_CREDITO'],
-              description: 'Método de pagamento',
+              $ref: '#/components/schemas/PaymentMethod',
             },
             installments: {
               type: 'integer',
@@ -136,7 +186,7 @@ const options: swaggerJsdoc.Options = {
             name: { type: 'string' },
             cpf: { type: 'string' },
             email: { type: 'string', format: 'email' },
-            role: { type: 'string', enum: ['ADMIN', 'GERENTE', 'EMPRESARIA', 'LIDER', 'CONSULTOR'] },
+            role: { $ref: '#/components/schemas/UserRole' },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' },
           },
@@ -154,7 +204,7 @@ const options: swaggerJsdoc.Options = {
             diasAtraso: { type: 'integer' },
             dataVencimento: { type: 'string', format: 'date-time' },
             numeroNf: { type: 'string' },
-            status: { type: 'string', enum: ['PENDENTE', 'ATRASADO', 'PAGO'] },
+            status: { $ref: '#/components/schemas/DebtStatus' },
             paidAmount: { type: 'number', format: 'decimal', description: 'Valor já pago via pagamentos parciais (acumulado)' },
             remaining: { type: 'number', format: 'decimal', description: 'Valor restante a pagar (valor - paidAmount)' },
             createdAt: { type: 'string', format: 'date-time' },
@@ -166,12 +216,12 @@ const options: swaggerJsdoc.Options = {
           properties: {
             id: { type: 'string', format: 'uuid' },
             userId: { type: 'string', format: 'uuid' },
-            method: { type: 'string', enum: ['PIX', 'CARTAO_CREDITO'] },
+            method: { $ref: '#/components/schemas/PaymentMethod' },
             installments: { type: 'integer' },
             subtotal: { type: 'number', format: 'decimal' },
             fee: { type: 'number', format: 'decimal' },
             totalValue: { type: 'number', format: 'decimal' },
-            status: { type: 'string', enum: ['PENDENTE', 'PAGO', 'CANCELADO'] },
+            status: { $ref: '#/components/schemas/PaymentStatus' },
             gatewayProvider: { type: 'string', enum: ['EREDE'] },
             referenceNum: { type: 'string', nullable: true },
             gatewayTransactionId: { type: 'string', nullable: true },

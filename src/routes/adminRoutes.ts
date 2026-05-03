@@ -161,8 +161,7 @@ router.post(
  *       - in: query
  *         name: role
  *         schema:
- *           type: string
- *           enum: [ADMIN, GERENTE, EMPRESARIA, LIDER, CONSULTOR]
+ *           $ref: '#/components/schemas/UserRole'
  *       - in: query
  *         name: grupo
  *         schema:
@@ -397,16 +396,7 @@ router.get(
  *                 type: array
  *                 description: Permissões granulares iniciais (opcional; padrão vazio)
  *                 items:
- *                   type: string
- *                   enum:
- *                     - users.manage
- *                     - debts.manage
- *                     - payments.manage
- *                     - reports.view
- *                     - reports.export
- *                     - settings.manage
- *                     - admins.manage
- *                     - transactions.approve
+ *                   $ref: '#/components/schemas/AdminPermission'
  *     responses:
  *       201:
  *         description: ADMIN criado
@@ -474,16 +464,7 @@ router.get(
  *               permissions:
  *                 type: array
  *                 items:
- *                   type: string
- *                   enum:
- *                     - users.manage
- *                     - debts.manage
- *                     - payments.manage
- *                     - reports.view
- *                     - reports.export
- *                     - settings.manage
- *                     - admins.manage
- *                     - transactions.approve
+ *                   $ref: '#/components/schemas/AdminPermission'
  *     responses:
  *       200: { description: ADM atualizado }
  *       400: { description: Body inválido / target não é ADMIN }
