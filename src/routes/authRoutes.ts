@@ -30,20 +30,7 @@ const router = Router();
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   example: success
- *                 message:
- *                   type: string
- *                 data:
- *                   type: object
- *                   properties:
- *                     user:
- *                       $ref: '#/components/schemas/User'
- *                     token:
- *                       type: string
+ *               $ref: '#/components/schemas/AuthSuccessResponse'
  *       400:
  *         description: Dados inválidos
  *         content:
@@ -81,20 +68,7 @@ router.post('/register', registerValidator, validate, (req: Request, res: Respon
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   example: success
- *                 message:
- *                   type: string
- *                 data:
- *                   type: object
- *                   properties:
- *                     user:
- *                       $ref: '#/components/schemas/User'
- *                     token:
- *                       type: string
+ *               $ref: '#/components/schemas/AuthSuccessResponse'
  *       401:
  *         description: Credenciais inválidas
  *         content:

@@ -125,16 +125,7 @@ router.get('/', (req: Request, res: Response, next: NextFunction) => debtControl
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 status: { type: string, example: success }
- *                 data:
- *                   type: object
- *                   properties:
- *                     totalDebitos: { type: integer, example: 142 }
- *                     valorTotal: { type: number, example: 12345.67 }
- *                     consultoresAtraso: { type: integer, example: 18 }
- *                     gruposAtivos: { type: integer, example: 7 }
+ *               $ref: '#/components/schemas/DebtSummaryResponse'
  *       401: { description: Não autenticado }
  *       403: { description: Consultor não vinculado (roles hierárquicas) }
  */

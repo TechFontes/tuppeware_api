@@ -285,16 +285,85 @@ const options: swaggerJsdoc.Options = {
         PaginatedResponse: {
           type: 'object',
           properties: {
-            data: { type: 'array', items: {} },
+            data: {
+              type: 'array',
+              items: { type: 'object' },
+              description: 'Itens da página (tipo varia por endpoint — veja allOf no endpoint específico)',
+            },
             pagination: {
               type: 'object',
+              required: ['total', 'page', 'limit', 'totalPages', 'hasNextPage', 'hasPreviousPage'],
               properties: {
-                total: { type: 'integer' },
-                page: { type: 'integer' },
-                limit: { type: 'integer' },
-                totalPages: { type: 'integer' },
-                hasNextPage: { type: 'boolean' },
-                hasPreviousPage: { type: 'boolean' },
+                total: { type: 'integer', example: 150 },
+                page: { type: 'integer', example: 1 },
+                limit: { type: 'integer', example: 20 },
+                totalPages: { type: 'integer', example: 8 },
+                hasNextPage: { type: 'boolean', example: true },
+                hasPreviousPage: { type: 'boolean', example: false },
+              },
+            },
+          },
+        },
+        AuthSuccessResponse: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', example: 'success' },
+            message: { type: 'string' },
+            data: {
+              type: 'object',
+              properties: {
+                user: { $ref: '#/components/schemas/User' },
+                token: {
+                  type: 'string',
+                  description: 'JWT assinado — expira em 7 dias',
+                  example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                },
+              },
+            },
+          },
+        },
+        SavedCardResponse: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            status: { $ref: '#/components/schemas/SavedCardStatus' },
+            cardBrand: { type: 'string', nullable: true, example: 'Visa' },
+            lastFour: { type: 'string', example: '1111' },
+            holderName: { type: 'string', example: 'JOAO DA SILVA' },
+            bin: { type: 'string', nullable: true, example: '411111' },
+            createdAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        ReopenPaymentResponse: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', example: 'success' },
+            data: {
+              type: 'object',
+              properties: {
+                checkoutUrl: {
+                  type: 'string',
+                  description: 'URL da imagem PNG do QR Code (data:image/png;base64,... inline)',
+                },
+                qrCode: {
+                  type: 'string',
+                  description: 'String EMV para copiar-colar no app bancário',
+                },
+              },
+            },
+          },
+        },
+        DebtSummaryResponse: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', example: 'success' },
+            data: {
+              type: 'object',
+              properties: {
+                totalDebitos: { type: 'integer', example: 142 },
+                valorTotal: { type: 'number', format: 'decimal', example: 12345.67 },
+                consultoresAtraso: { type: 'integer', example: 18 },
+                gruposAtivos: { type: 'integer', example: 7 },
               },
             },
           },

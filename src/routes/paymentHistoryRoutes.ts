@@ -134,18 +134,7 @@ router.get('/:id', (req: Request, res: Response, next: NextFunction) => paymentH
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   example: success
- *                 data:
- *                   type: object
- *                   properties:
- *                     checkoutUrl:
- *                       type: string
- *                     qrCode:
- *                       type: string
+ *               $ref: '#/components/schemas/ReopenPaymentResponse'
  *       400:
  *         description: Pagamento não é PIX ou não está pendente
  *       403:
