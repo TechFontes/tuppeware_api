@@ -423,6 +423,27 @@ describe('UserService.updateAdmin', () => {
     const result = await userService.updateAdmin('user-1', { name: 'Novo' });
     expect((result as any).password).toBeUndefined();
   });
+
+  it('aceita jobTitle e passa para o repository', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+    vi.mocked(userRepository.update).mockResolvedValueOnce(makeUser({ role: 'ADMIN', jobTitle: 'Coordenadora' }) as any);
+
+    const result = await userService.updateAdmin('user-1', { jobTitle: 'Coordenadora' });
+
+    const updateCall = vi.mocked(userRepository.update).mock.calls[0][1] as any;
+    expect(updateCall.jobTitle).toBe('Coordenadora');
+    expect(result).toBeDefined();
+  });
+
+  it('aceita jobTitle="" para limpar o cargo', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+    vi.mocked(userRepository.update).mockResolvedValueOnce(makeUser({ role: 'ADMIN', jobTitle: '' }) as any);
+
+    await userService.updateAdmin('user-1', { jobTitle: '' });
+
+    const updateCall = vi.mocked(userRepository.update).mock.calls[0][1] as any;
+    expect(updateCall.jobTitle).toBe('');
+  });
 });
 
 // ------------------------------------------------- updateClientConsultant

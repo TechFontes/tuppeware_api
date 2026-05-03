@@ -114,6 +114,26 @@ describe('AdminController.updateUser — whitelist de campos', () => {
   });
 });
 
+// --------------------------------------------------------- updateManager
+describe('AdminController.updateManager', () => {
+  it('passa jobTitle do body pro service', async () => {
+    vi.mocked(userService.updateAdmin).mockResolvedValueOnce({ id: 'm1' } as any);
+    const req: any = {
+      user: { id: 'caller-1', role: 'GERENTE', email: 'g@g.com' },
+      params: { id: 'manager-1' },
+      body: { name: 'Novo', jobTitle: 'Diretora' },
+    };
+    const res = makeRes();
+
+    await adminController.updateManager(req, res, vi.fn());
+
+    expect(userService.updateAdmin).toHaveBeenCalledWith(
+      'manager-1',
+      expect.objectContaining({ name: 'Novo', jobTitle: 'Diretora' }),
+    );
+  });
+});
+
 // ---------------------------------------------------------- createManager
 describe('AdminController.createManager', () => {
   it('createManager passa caller (req.user) como 2º arg para userService', async () => {

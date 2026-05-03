@@ -280,7 +280,7 @@ class UserService {
     }
   }
 
-  async updateAdmin(id: string, data: { name?: string; email?: string }) {
+  async updateAdmin(id: string, data: { name?: string; email?: string; jobTitle?: string }) {
     const user = await userRepository.findById(id);
 
     if (!user) {

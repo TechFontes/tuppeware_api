@@ -217,8 +217,8 @@ class AdminController {
    */
   async updateManager(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { name, email } = req.body as { name?: string; email?: string };
-      const manager = await userService.updateAdmin(String(req.params.id), { name, email });
+      const { name, email, jobTitle } = req.body as { name?: string; email?: string; jobTitle?: string };
+      const manager = await userService.updateAdmin(String(req.params.id), { name, email, jobTitle });
 
       res.status(StatusCodes.OK).json({ status: 'success', data: manager });
     } catch (error) {
