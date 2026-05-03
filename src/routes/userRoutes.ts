@@ -180,6 +180,15 @@ router.put(
  *                 type: string
  *                 example: '123'
  *                 description: CVV opcional — se enviado, valida no momento da tokenização
+ *           examples:
+ *             tokenizacao_visa:
+ *               summary: Tokenizar cartão Visa
+ *               value:
+ *                 cardNumber: "4111111111111111"
+ *                 expMonth: "12"
+ *                 expYear: "2028"
+ *                 holderName: "JOAO DA SILVA"
+ *                 securityCode: "123"
  *     responses:
  *       201:
  *         description: |
@@ -194,6 +203,31 @@ router.put(
  *                 status: { type: string, example: 'success' }
  *                 data:
  *                   $ref: '#/components/schemas/SavedCardResponse'
+ *             examples:
+ *               cartao_pending:
+ *                 summary: Cartão salvo — sync via webhook pendente
+ *                 value:
+ *                   status: success
+ *                   data:
+ *                     id: "7f3e2a1b-0c4d-5e6f-7a8b-9c0d1e2f3a4b"
+ *                     status: PENDING
+ *                     cardBrand: null
+ *                     lastFour: "1111"
+ *                     holderName: "JOAO DA SILVA"
+ *                     bin: null
+ *                     createdAt: "2025-05-02T10:30:00.000Z"
+ *               cartao_active:
+ *                 summary: Cartão salvo — sync imediato funcionou
+ *                 value:
+ *                   status: success
+ *                   data:
+ *                     id: "7f3e2a1b-0c4d-5e6f-7a8b-9c0d1e2f3a4b"
+ *                     status: ACTIVE
+ *                     cardBrand: "Visa"
+ *                     lastFour: "1111"
+ *                     holderName: "JOAO DA SILVA"
+ *                     bin: "411111"
+ *                     createdAt: "2025-05-02T10:30:00.000Z"
  *       400:
  *         description: Dados inválidos
  *       401:

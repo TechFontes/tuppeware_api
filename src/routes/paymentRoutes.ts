@@ -71,9 +71,86 @@ router.use(authMiddleware);
  *         application/json:
  *           schema:
  *             $ref: '#/components/schemas/CreatePaymentDTO'
+ *           examples:
+ *             pix_simples:
+ *               summary: Pagamento PIX — débito único
+ *               value:
+ *                 debtIds: ["550e8400-e29b-41d4-a716-446655440001"]
+ *                 method: PIX
+ *                 billing:
+ *                   name: "Maria Silva"
+ *                   email: "maria@email.com"
+ *                   phone: "11999999999"
+ *                   document: "12345678901"
+ *                   address: "Rua Exemplo, 100"
+ *                   district: "Centro"
+ *                   city: "São Paulo"
+ *                   state: "SP"
+ *                   postalcode: "01001000"
+ *                   country: "BR"
+ *             cartao_credito:
+ *               summary: Pagamento com cartão de crédito (3 parcelas)
+ *               value:
+ *                 debtIds: ["550e8400-e29b-41d4-a716-446655440001", "550e8400-e29b-41d4-a716-446655440002"]
+ *                 method: CARTAO_CREDITO
+ *                 installments: 3
+ *                 card:
+ *                   number: "4111111111111111"
+ *                   expMonth: "12"
+ *                   expYear: "2028"
+ *                   cvv: "123"
+ *                   holderName: "MARIA SILVA"
+ *                 billing:
+ *                   name: "Maria Silva"
+ *                   email: "maria@email.com"
+ *                   phone: "11999999999"
+ *                   document: "12345678901"
+ *                   address: "Rua Exemplo, 100"
+ *                   district: "Centro"
+ *                   city: "São Paulo"
+ *                   state: "SP"
+ *                   postalcode: "01001000"
+ *                   country: "BR"
  *     responses:
  *       201:
- *         description: Pagamento processado com sucesso
+ *         description: Pagamento criado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     paymentId: { type: string, format: uuid }
+ *                     referenceNum:
+ *                       type: string
+ *                       description: Referência única no formato TPW-{timestamp}-{userId[0:8]}
+ *                       example: TPW-1704067200000-abcd1234
+ *                     method: { $ref: '#/components/schemas/PaymentMethod' }
+ *                     totalValue: { type: number, example: 250.00 }
+ *                     qrCode:
+ *                       type: string
+ *                       nullable: true
+ *                       description: String EMV para copiar-colar (PIX). null em pagamentos de cartão.
+ *                       example: "00020126580014BR.GOV.BCB.PIX0136..."
+ *                     checkoutUrl:
+ *                       type: string
+ *                       nullable: true
+ *                       description: URL data:image/png;base64,... com PNG inline do QR Code (PIX). null em cartão.
+ *             examples:
+ *               pix_response:
+ *                 summary: Resposta PIX com QR Code
+ *                 value:
+ *                   status: success
+ *                   data:
+ *                     paymentId: "550e8400-e29b-41d4-a716-446655440099"
+ *                     referenceNum: "TPW-1704067200000-abcd1234"
+ *                     method: PIX
+ *                     totalValue: 250.00
+ *                     qrCode: "00020126580014BR.GOV.BCB.PIX0136..."
+ *                     checkoutUrl: "data:image/png;base64,iVBORw0KGgoAAAANS..."
  *       502:
  *         description: Falha de integração com o gateway
  *       400:
