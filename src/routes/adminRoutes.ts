@@ -67,7 +67,7 @@ router.use(authMiddleware);
  */
 router.post(
   '/import/consultants',
-  roleMiddleware('ADMIN', 'GERENTE'),
+  requirePermission(AdminPermission.USERS_MANAGE),
   upload.single('file'),
   csvUploadValidator,
   (req: Request, res: Response, next: NextFunction) => adminController.importConsultants(req, res, next),
@@ -103,7 +103,7 @@ router.post(
  */
 router.post(
   '/import/debts',
-  roleMiddleware('ADMIN', 'GERENTE'),
+  requirePermission(AdminPermission.DEBTS_MANAGE),
   upload.single('file'),
   csvUploadValidator,
   (req: Request, res: Response, next: NextFunction) => adminController.importDebts(req, res, next),
@@ -139,7 +139,7 @@ router.post(
  */
 router.post(
   '/import/clients',
-  roleMiddleware('ADMIN', 'GERENTE'),
+  requirePermission(AdminPermission.USERS_MANAGE),
   upload.single('file'),
   csvUploadValidator,
   (req: Request, res: Response, next: NextFunction) => adminController.importClients(req, res, next),
@@ -191,7 +191,7 @@ router.post(
  */
 router.get(
   '/users',
-  roleMiddleware('ADMIN', 'GERENTE'),
+  requirePermission(AdminPermission.USERS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.listUsers(req, res, next),
 );
 
@@ -217,7 +217,7 @@ router.get(
  */
 router.get(
   '/users/:id',
-  roleMiddleware('ADMIN', 'GERENTE'),
+  requirePermission(AdminPermission.USERS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.getUser(req, res, next),
 );
 
@@ -247,7 +247,7 @@ router.get(
  */
 router.put(
   '/users/:id',
-  roleMiddleware('ADMIN', 'GERENTE'),
+  requirePermission(AdminPermission.USERS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.updateUser(req, res, next),
 );
 
@@ -271,7 +271,7 @@ router.put(
  */
 router.patch(
   '/users/:id/deactivate',
-  roleMiddleware('ADMIN', 'GERENTE'),
+  requirePermission(AdminPermission.USERS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.deactivateUser(req, res, next),
 );
 
@@ -303,7 +303,7 @@ router.patch(
  */
 router.get(
   '/users/:id/payments',
-  roleMiddleware('ADMIN', 'GERENTE'),
+  requirePermission(AdminPermission.PAYMENTS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.getUserPayments(req, res, next),
 );
 
@@ -385,7 +385,7 @@ router.get(
  */
 router.post(
   '/managers',
-  roleMiddleware('GERENTE'),
+  requirePermission(AdminPermission.ADMINS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.createManager(req, res, next),
 );
 
@@ -403,7 +403,7 @@ router.post(
  */
 router.get(
   '/managers',
-  roleMiddleware('GERENTE'),
+  requirePermission(AdminPermission.ADMINS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.listManagers(req, res, next),
 );
 
@@ -493,7 +493,7 @@ router.put(
  */
 router.put(
   '/managers/:id',
-  roleMiddleware('GERENTE'),
+  requirePermission(AdminPermission.ADMINS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.updateManager(req, res, next),
 );
 
@@ -515,7 +515,7 @@ router.put(
  */
 router.get(
   '/settings',
-  roleMiddleware('GERENTE'),
+  requirePermission(AdminPermission.SETTINGS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.getSettings(req, res, next),
 );
 
@@ -575,7 +575,7 @@ router.get(
  */
 router.put(
   '/settings',
-  roleMiddleware('GERENTE'),
+  requirePermission(AdminPermission.SETTINGS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.updateSettings(req, res, next),
 );
 
@@ -585,25 +585,25 @@ router.put(
 
 router.post(
   '/debts',
-  roleMiddleware('ADMIN', 'GERENTE'),
+  requirePermission(AdminPermission.DEBTS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.createDebt(req, res, next),
 );
 
 router.patch(
   '/debts/:id/status',
-  roleMiddleware('ADMIN', 'GERENTE'),
+  requirePermission(AdminPermission.DEBTS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.updateDebtStatus(req, res, next),
 );
 
 router.get(
   '/debts/weekly',
-  roleMiddleware('ADMIN', 'GERENTE'),
+  requirePermission(AdminPermission.DEBTS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.getWeeklyDebts(req, res, next),
 );
 
 router.get(
   '/debts/paid-today',
-  roleMiddleware('ADMIN', 'GERENTE'),
+  requirePermission(AdminPermission.DEBTS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.getPaidTodayDebts(req, res, next),
 );
 
@@ -613,13 +613,13 @@ router.get(
 
 router.get(
   '/clients',
-  roleMiddleware('ADMIN', 'GERENTE'),
+  requirePermission(AdminPermission.USERS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.listClients(req, res, next),
 );
 
 router.patch(
   '/clients/:id',
-  roleMiddleware('ADMIN', 'GERENTE'),
+  requirePermission(AdminPermission.USERS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.updateClient(req, res, next),
 );
 
@@ -629,7 +629,7 @@ router.patch(
 
 router.get(
   '/organization',
-  roleMiddleware('ADMIN', 'GERENTE'),
+  requirePermission(AdminPermission.USERS_MANAGE),
   (req: Request, res: Response, next: NextFunction) => adminController.getOrganization(req, res, next),
 );
 
@@ -639,7 +639,7 @@ router.get(
 
 router.get(
   '/reports/paid-documents',
-  roleMiddleware('ADMIN', 'GERENTE'),
+  requirePermission(AdminPermission.REPORTS_VIEW),
   (req: Request, res: Response, next: NextFunction) => adminController.getPaidDocuments(req, res, next),
 );
 
