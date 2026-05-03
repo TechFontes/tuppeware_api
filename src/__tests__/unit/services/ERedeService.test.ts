@@ -12,21 +12,26 @@ const getService = async () => {
 };
 
 describe('ERedeService.buildPixPayload', () => {
-  it('retorna payload com kind=pix e campos corretos', async () => {
+  it('retorna payload com kind=Pix capitalizado e qrCode.dateTimeExpiration', async () => {
     const svc = await getService();
     const payload = svc.buildPixPayload('TPW-123-abcd1234', 15000);
-    expect(payload.kind).toBe('pix');
+    expect(payload.kind).toBe('Pix');
     expect(payload.reference).toBe('TPW-123-abcd1234');
     expect(payload.amount).toBe(15000);
-    expect(payload.expirationDate).toBeDefined();
+    expect(payload.qrCode).toBeDefined();
+    expect(payload.qrCode.dateTimeExpiration).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
   });
 
-  it('data de expiração está no futuro', async () => {
+  it('dateTimeExpiration está no futuro e SEM timezone/ms', async () => {
     const svc = await getService();
     const before = Date.now();
     const payload = svc.buildPixPayload('TPW-1', 1000);
-    const expiration = new Date(payload.expirationDate!).getTime();
-    expect(expiration).toBeGreaterThan(before);
+    const dt = payload.qrCode.dateTimeExpiration;
+    expect(dt).not.toMatch(/Z$/);
+    expect(dt).not.toMatch(/[+\-]\d{2}:?\d{2}$/);
+    expect(dt).not.toMatch(/\.\d/);
+    // Parsing como UTC para comparação aproximada
+    expect(new Date(dt + 'Z').getTime()).toBeGreaterThan(before);
   });
 });
 
@@ -425,7 +430,11 @@ describe('ERedeService.createTransaction', () => {
       .mockResolvedValueOnce(json({ access_token: 'tok', expires_in: 1439 }))
       .mockResolvedValueOnce(json({
         tid: 'tid-123', returnCode: '00', returnMessage: 'Aprovado', reference: 'TPW-1',
-        pix: { qrCode: '00020126...', link: 'https://pix.link/qr', expirationDate: '2026-04-02T10:00:00Z' },
+        qrCodeResponse: {
+          qrCodeData: '00020126...',
+          qrCodeImage: 'iVBORw0KGgoAAAANSUhEUgAAAPo...',
+          dateTimeExpiration: '2026-05-04T00:38:48',
+        },
       }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -433,7 +442,8 @@ describe('ERedeService.createTransaction', () => {
     const result = await svc.createTransaction(svc.buildPixPayload('TPW-1', 15000));
 
     expect(result.returnCode).toBe('00');
-    expect(result.pix?.qrCode).toBe('00020126...');
+    expect(result.pix?.qrCodeData).toBe('00020126...');
+    expect(result.pix?.qrCodeImage).toBe('iVBORw0KGgoAAAANSUhEUgAAAPo...');
     const init = fetchMock.mock.calls[1][1];
     expect(init.headers.Authorization).toBe('Bearer tok');
     expect(init.headers.Affiliation).toBe('test-client');
@@ -481,7 +491,7 @@ describe('ERedeService.createTransaction', () => {
     delete process.env.EREDE_CLIENT_ID;
     vi.resetModules();
     const mod = await import('../../../services/ERedeService');
-    await expect(mod.default.createTransaction({ kind: 'pix', reference: 'TPW-1', amount: 1000, expirationDate: '' }))
+    await expect(mod.default.createTransaction({ kind: 'Pix', reference: 'TPW-1', amount: 1000, qrCode: { dateTimeExpiration: '' } }))
       .rejects.toMatchObject({ statusCode: 500 });
   });
 

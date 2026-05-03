@@ -195,8 +195,8 @@ class PaymentService {
       gatewayStatusCode: gatewayResponse.returnCode,
       gatewayStatusMessage: gatewayResponse.returnMessage,
       processorReference: gatewayResponse.authorizationCode || null,
-      paymentLink: gatewayResponse.pix?.link || null,
-      qrCode: gatewayResponse.pix?.qrCode || null,
+      paymentLink: null,
+      qrCode: gatewayResponse.pix?.qrCodeData || null,
       nsu: gatewayResponse.nsu ?? null,
       authorizationCode: gatewayResponse.authorizationCode ?? null,
       debtIds,
@@ -244,14 +244,14 @@ class PaymentService {
       totalValue,
       method,
       gatewayResponseCode: gatewayResponse.returnCode,
-      checkoutUrl: gatewayResponse.pix?.link || null,
-      qrCode: gatewayResponse.pix?.qrCode || null,
+      checkoutUrl: null,
+      qrCode: gatewayResponse.pix?.qrCodeData || null,
     });
 
     return {
       ...payment,
-      checkoutUrl: gatewayResponse.pix?.link || null,
-      qrCode: gatewayResponse.pix?.qrCode || null,
+      checkoutUrl: null,
+      qrCode: gatewayResponse.pix?.qrCodeData || null,
       gatewayResponseCode: gatewayResponse.returnCode,
       gatewayResponseMessage: gatewayResponse.returnMessage,
     };
@@ -547,8 +547,8 @@ class PaymentService {
       gatewayTransactionId: gatewayResp.tid || null,
       gatewayStatusCode: gatewayResp.returnCode || null,
       gatewayStatusMessage: gatewayResp.returnMessage || null,
-      paymentLink: gatewayResp.pix?.link || null,
-      qrCode: gatewayResp.pix?.qrCode ?? (gatewayResp as any).qrCode ?? null,
+      paymentLink: null,
+      qrCode: gatewayResp.pix?.qrCodeData || null,
       nsu: gatewayResp.nsu ?? null,
       authorizationCode: gatewayResp.authorizationCode ?? null,
       debtIds: [dto.debtId],
@@ -617,14 +617,14 @@ class PaymentService {
       gatewayTransactionId: gatewayResponse.tid || null,
       gatewayStatusCode: gatewayResponse.returnCode,
       gatewayStatusMessage: gatewayResponse.returnMessage,
-      paymentLink: gatewayResponse.pix?.link || null,
-      qrCode: gatewayResponse.pix?.qrCode || null,
+      paymentLink: null,
+      qrCode: gatewayResponse.pix?.qrCodeData || null,
     });
 
     return {
       ...updated,
-      checkoutUrl: gatewayResponse.pix?.link || null,
-      qrCode: gatewayResponse.pix?.qrCode || null,
+      checkoutUrl: null,
+      qrCode: gatewayResponse.pix?.qrCodeData || null,
       reopened: true,
     };
   }

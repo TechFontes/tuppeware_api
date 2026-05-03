@@ -109,10 +109,12 @@ export interface ERedeBilling {
 }
 
 export interface ERedePixRequest {
-  kind: 'pix';
+  kind: 'Pix';
   reference: string;
   amount: number; // centavos
-  expirationDate: string; // ISO 8601
+  qrCode: {
+    dateTimeExpiration: string; // 'Y-m-d\TH:i:s' sem timezone
+  };
 }
 
 export interface ERedeCreditRequest {
@@ -134,9 +136,9 @@ export interface ERedeCreditRequest {
 export type ERedeTransactionRequest = ERedePixRequest | ERedeCreditRequest;
 
 export interface ERedePixData {
-  qrCode: string;   // string EMV para copiar-colar
-  link: string;     // URL imagem do QR code
-  expirationDate: string;
+  qrCodeData: string;    // string EMV para copiar-colar
+  qrCodeImage: string;   // PNG base64 inline (sem prefixo data:image)
+  dateTimeExpiration: string;
 }
 
 export interface ERedeTransactionResponse {

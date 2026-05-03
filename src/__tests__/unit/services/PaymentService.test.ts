@@ -21,7 +21,7 @@ vi.mock('../../../services/WebhookDispatcher', () => ({ default: { send: vi.fn()
 
 vi.mock('../../../services/ERedeService', () => ({
   default: {
-    buildPixPayload: vi.fn().mockReturnValue({ kind: 'pix', reference: 'TPW-mock', amount: 10000, expirationDate: '' }),
+    buildPixPayload: vi.fn().mockReturnValue({ kind: 'Pix', reference: 'TPW-mock', amount: 10000, qrCode: { dateTimeExpiration: '2026-05-04T00:38:48' } }),
     buildCreditPayload: vi.fn().mockReturnValue({ kind: 'credit' }),
     createTransaction: vi.fn(),
     validateCallbackSignature: vi.fn(),
@@ -101,7 +101,7 @@ beforeEach(() => {
   vi.mocked(paymentRepository.countPendingByUser).mockResolvedValue(0);
   vi.mocked(eRedeService.createTransaction).mockResolvedValue({
     tid: 'tid-abc', returnCode: '00', returnMessage: 'Aprovado', reference: 'TPW-mock',
-    pix: { qrCode: '00020126...', link: 'https://pix.link', expirationDate: '2026-04-02T10:00:00Z' },
+    pix: { qrCodeData: '00020126...', qrCodeImage: 'iVBOR...', dateTimeExpiration: '2026-05-04T00:38:48' },
     raw: {},
   });
   vi.mocked(paymentRepository.create).mockResolvedValue(makePayment() as any);
@@ -350,10 +350,10 @@ describe('PaymentService.reopenPayment — PIX expirado cria nova transação', 
       createdAt: yesterday,
       totalValue: 150,
     } as any);
-    vi.mocked(eRedeService.buildPixPayload).mockReturnValueOnce({ kind: 'pix', reference: 'TPW-new', amount: 15000, expirationDate: '' });
+    vi.mocked(eRedeService.buildPixPayload).mockReturnValueOnce({ kind: 'Pix', reference: 'TPW-new', amount: 15000, qrCode: { dateTimeExpiration: '2026-05-04T00:38:48' } });
     vi.mocked(eRedeService.createTransaction).mockResolvedValueOnce({
       tid: 'tid-new', returnCode: '00', returnMessage: 'OK', reference: 'TPW-new',
-      pix: { qrCode: 'qr-code-new', link: 'https://pix.link/new', expirationDate: '2026-04-02T10:00:00Z' },
+      pix: { qrCodeData: 'qr-code-new', qrCodeImage: 'iVBOR...', dateTimeExpiration: '2026-05-04T00:38:48' },
       raw: {},
     });
     vi.mocked(paymentRepository.update).mockResolvedValueOnce({
@@ -399,7 +399,7 @@ describe('PaymentService.create — atomicidade via status na criação (CRIT-03
     vi.mocked(debtRepository.findByIds).mockResolvedValueOnce([makeDebt('d1') as any]);
     vi.mocked(eRedeService.createTransaction).mockResolvedValueOnce({
       tid: 'tid-pix', returnCode: '57', returnMessage: 'Pendente', reference: 'TPW-mock',
-      pix: { qrCode: '00020126...', link: 'https://pix.link', expirationDate: '2026-04-02T10:00:00Z' },
+      pix: { qrCodeData: '00020126...', qrCodeImage: 'iVBOR...', dateTimeExpiration: '2026-05-04T00:38:48' },
       raw: {},
     });
     vi.mocked(eRedeService.mapStatusToLocal).mockReturnValue('PENDENTE');
@@ -429,7 +429,7 @@ describe('PaymentService.create — atomicidade via status na criação (CRIT-03
     vi.mocked(debtRepository.findByIds).mockResolvedValueOnce([makeDebt('d1') as any]);
     vi.mocked(eRedeService.createTransaction).mockResolvedValueOnce({
       tid: 'tid-pix', returnCode: '57', returnMessage: 'Pendente', reference: 'TPW-mock',
-      pix: { qrCode: '00020126...', link: 'https://pix.link', expirationDate: '2026-04-02T10:00:00Z' },
+      pix: { qrCodeData: '00020126...', qrCodeImage: 'iVBOR...', dateTimeExpiration: '2026-05-04T00:38:48' },
       raw: {},
     });
     vi.mocked(eRedeService.mapStatusToLocal).mockReturnValue('PENDENTE');
@@ -743,7 +743,7 @@ describe('PaymentService.create — persiste nsu e authorizationCode do gateway'
       reference: 'TPW-mock',
       nsu: '123456',
       authorizationCode: '789012',
-      pix: { qrCode: 'QR', link: 'https://pix.link', expirationDate: '' },
+      pix: { qrCodeData: 'QR', qrCodeImage: '', dateTimeExpiration: '' },
       raw: {},
     });
     vi.mocked(eRedeService.mapStatusToLocal).mockReturnValueOnce('PAGO');

@@ -101,12 +101,15 @@ class ERedeService {
    */
   buildPixPayload(reference: string, amountCents: number): ERedePixRequest {
     const expiration = new Date(Date.now() + eredePixExpirationHours * 60 * 60 * 1000);
+    // Formato exigido pela eRede v2: Y-m-d\TH:i:s sem timezone nem ms.
+    // Validado contra sandbox 2026-05-02. NÃO usar toISOString() (manda Z e é rejeitado).
+    const dateTimeExpiration = expiration.toISOString().slice(0, 19);
 
     return {
-      kind: 'pix',
+      kind: 'Pix',
       reference,
       amount: amountCents,
-      expirationDate: expiration.toISOString(),
+      qrCode: { dateTimeExpiration },
     };
   }
 
@@ -356,7 +359,8 @@ class ERedeService {
   }
 
   private parseResponse(json: Record<string, unknown>): ERedeTransactionResponse {
-    const pixData = json.pix as Record<string, unknown> | undefined;
+    // eRede v2 retorna dados PIX em qrCodeResponse (descoberto 2026-05-02 via sandbox).
+    const pixData = json.qrCodeResponse as Record<string, unknown> | undefined;
 
     return {
       tid: String(json.tid ?? ''),
@@ -371,9 +375,9 @@ class ERedeService {
       transactionLinkId: json.transactionLinkId ? String(json.transactionLinkId) : undefined,
       pix: pixData
         ? {
-          qrCode: String(pixData.qrCode ?? ''),
-          link: String(pixData.link ?? ''),
-          expirationDate: String(pixData.expirationDate ?? ''),
+          qrCodeData: String(pixData.qrCodeData ?? ''),
+          qrCodeImage: String(pixData.qrCodeImage ?? ''),
+          dateTimeExpiration: String(pixData.dateTimeExpiration ?? ''),
         }
         : undefined,
       raw: json,
