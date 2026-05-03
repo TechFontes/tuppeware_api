@@ -3,7 +3,9 @@ import multer from 'multer';
 import adminController from '../controllers/AdminController';
 import { authMiddleware } from '../middlewares/authMiddleware';
 import { roleMiddleware } from '../middlewares/roleMiddleware';
+import { requirePermission } from '../middlewares/permissionMiddleware';
 import { csvUploadValidator } from '../validators/adminValidator';
+import { AdminPermission } from '../types/permissions';
 
 const router = Router();
 
@@ -403,6 +405,61 @@ router.get(
   '/managers',
   roleMiddleware('GERENTE'),
   (req: Request, res: Response, next: NextFunction) => adminController.listManagers(req, res, next),
+);
+
+/**
+ * @swagger
+ * /admin/managers/{id}/permissions:
+ *   put:
+ *     tags: [Admin]
+ *     summary: Atualiza permissões granulares de um ADM
+ *     description: |
+ *       Substitui o array completo de permissões do ADM `id`. Aceita array
+ *       vazio para revogar todas. Cache do `permissionMiddleware` é invalidado
+ *       imediatamente — próxima request do target lê fresh do DB.
+ *
+ *       Regras (no UserService):
+ *       - Anti-escalada: caller não-GERENTE não pode dar permissão que ele
+ *         mesmo não tem (403)
+ *       - `admins.manage` só GERENTE concede (403)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [permissions]
+ *             properties:
+ *               permissions:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   enum:
+ *                     - users.manage
+ *                     - debts.manage
+ *                     - payments.manage
+ *                     - reports.view
+ *                     - reports.export
+ *                     - settings.manage
+ *                     - admins.manage
+ *                     - transactions.approve
+ *     responses:
+ *       200: { description: ADM atualizado }
+ *       400: { description: Body inválido / target não é ADMIN }
+ *       403: { description: Sem admins.manage / anti-escalada / admins.manage só GERENTE }
+ *       404: { description: ADM não encontrado }
+ */
+router.put(
+  '/managers/:id/permissions',
+  requirePermission(AdminPermission.ADMINS_MANAGE),
+  (req: Request, res: Response, next: NextFunction) => adminController.updateManagerPermissions(req, res, next),
 );
 
 /**

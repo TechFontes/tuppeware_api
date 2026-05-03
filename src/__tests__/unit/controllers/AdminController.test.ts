@@ -9,6 +9,7 @@ vi.mock('../../../services/UserService', () => ({
     createAdmin: vi.fn(),
     listAdmins: vi.fn(),
     updateAdmin: vi.fn(),
+    updateAdminPermissions: vi.fn(),
     deactivateUser: vi.fn(),
     getUserPayments: vi.fn(),
     updateClientConsultant: vi.fn(),
@@ -150,6 +151,66 @@ describe('AdminController.createManager', () => {
       expect.objectContaining({ permissions: ['users.manage'] }),
       { id: 'caller-1', role: 'GERENTE' },
     );
+  });
+});
+
+// ------------------------------------------------ updateManagerPermissions
+describe('AdminController.updateManagerPermissions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('chama userService.updateAdminPermissions com targetId, permissions e caller', async () => {
+    vi.mocked(userService.updateAdminPermissions).mockResolvedValueOnce({ id: 'm1', permissions: ['users.manage'] } as any);
+
+    const req: any = {
+      user: { id: 'caller-1', role: 'ADMIN', email: 'c@c.com' },
+      params: { id: 'manager-1' },
+      body: { permissions: ['users.manage', 'debts.manage'] },
+    };
+    const res = makeRes();
+
+    await adminController.updateManagerPermissions(req, res, vi.fn());
+
+    expect(userService.updateAdminPermissions).toHaveBeenCalledWith(
+      'manager-1',
+      ['users.manage', 'debts.manage'],
+      { id: 'caller-1', role: 'ADMIN' },
+    );
+    expect(res.status).toHaveBeenCalledWith(StatusCodes.OK);
+    const jsonArg = vi.mocked(res.json).mock.calls[0][0] as any;
+    expect(jsonArg.status).toBe('success');
+  });
+
+  it('lança 400 quando body.permissions ausente ou não-array', async () => {
+    const req: any = {
+      user: { id: 'caller-1', role: 'ADMIN', email: 'c@c.com' },
+      params: { id: 'manager-1' },
+      body: {},
+    };
+    const res = makeRes();
+    const next = vi.fn();
+
+    await adminController.updateManagerPermissions(req, res, next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
+    expect(userService.updateAdminPermissions).not.toHaveBeenCalled();
+  });
+
+  it('aceita array vazio (revoga todas)', async () => {
+    vi.mocked(userService.updateAdminPermissions).mockResolvedValueOnce({ id: 'm1', permissions: [] } as any);
+
+    const req: any = {
+      user: { id: 'caller-1', role: 'GERENTE', email: 'g@g.com' },
+      params: { id: 'manager-1' },
+      body: { permissions: [] },
+    };
+    const res = makeRes();
+
+    await adminController.updateManagerPermissions(req, res, vi.fn());
+
+    expect(userService.updateAdminPermissions).toHaveBeenCalledWith('manager-1', [], expect.anything());
+    expect(res.status).toHaveBeenCalledWith(StatusCodes.OK);
   });
 });
 

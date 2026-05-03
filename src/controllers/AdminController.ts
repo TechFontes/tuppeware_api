@@ -6,6 +6,7 @@ import userService from '../services/UserService';
 import debtService from '../services/DebtService';
 import paymentService from '../services/PaymentService';
 import settingsService from '../services/SettingsService';
+import AppError from '../utils/AppError';
 import type { UserRole, Prisma } from '../../generated/prisma/client';
 import { PERMISSION_CATALOG, type AdminPermission } from '../types/permissions';
 
@@ -221,6 +222,33 @@ class AdminController {
       const manager = await userService.updateAdmin(String(req.params.id), { name, email, jobTitle });
 
       res.status(StatusCodes.OK).json({ status: 'success', data: manager });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PUT /api/admin/managers/:id/permissions
+   */
+  async updateManagerPermissions(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const targetId = String(req.params.id);
+      const { permissions } = req.body as { permissions?: unknown };
+
+      if (!Array.isArray(permissions)) {
+        throw new AppError(
+          'Campo permissions deve ser um array.',
+          StatusCodes.BAD_REQUEST,
+        );
+      }
+
+      const updated = await userService.updateAdminPermissions(
+        targetId,
+        permissions as AdminPermission[],
+        { id: req.user!.id, role: req.user!.role },
+      );
+
+      res.status(StatusCodes.OK).json({ status: 'success', data: updated });
     } catch (error) {
       next(error);
     }
