@@ -53,6 +53,7 @@ Se não existe um teste falhando, não existe código novo.
   - `GET /tokenization/{id}` retorna `brand` como **objeto** `{ name, tokenStatus, brandTid }` — não string. `last4` (não `last4digits`)
   - `billing.birthDate` **não é exigido** pelo gateway v2 — validado em sandbox 2026-05-01 com `returnCode "00"` sem o campo
   - `POST /tokenization/{id}/management` (delete) retorna 403 em sandbox para todos os formatos testados — funcionalidade só validável em produção real
+  - **PIX em `POST /v2/transactions`** (validado em sandbox 2026-05-02): `kind: "Pix"` (P maiúsculo, não `"pix"`); campo de expiração é `qrCode: { dateTimeExpiration: "Y-m-d\\TH:i:s" }` SEM timezone nem ms; resposta vem em `qrCodeResponse: { qrCodeData, qrCodeImage, dateTimeExpiration }` — NÃO em `pix: { qrCode, link }`. SDKs oficiais php/node da Rede ainda não suportam PIX; referência confiável é o plugin WP `virtuaria-eredeitau` (open-source) que tem PIX rodando em produção real.
 
 ---
 
