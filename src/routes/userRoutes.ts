@@ -195,6 +195,12 @@ router.put(
  *                   $ref: '#/components/schemas/SavedCardResponse'
  *       400:
  *         description: Dados inválidos
+ *       401:
+ *         description: Não autenticado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       422:
  *         description: Tokenização recusada pela eRede (cartão inválido)
  *       502:
@@ -228,6 +234,12 @@ router.post(
  *                   type: array
  *                   items:
  *                     $ref: '#/components/schemas/SavedCardResponse'
+ *       401:
+ *         description: Não autenticado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get(
   '/me/saved-cards',
@@ -251,10 +263,24 @@ router.get(
  *     responses:
  *       204:
  *         description: Cartão removido
+ *       401:
+ *         description: Não autenticado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
  *         description: Acesso negado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
  *         description: Cartão não encontrado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.delete(
   '/me/saved-cards/:id',
