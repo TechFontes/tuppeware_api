@@ -29,10 +29,16 @@ vi.mock('../../../repositories/ConsultantRepository', () => ({
   },
 }));
 
+vi.mock('../../../middlewares/permissionMiddleware', () => ({
+  clearPermissionCache: vi.fn(),
+  requirePermission: vi.fn(),
+}));
+
 import userService from '../../../services/UserService';
 import userRepository from '../../../repositories/UserRepository';
 import paymentRepository from '../../../repositories/PaymentRepository';
 import consultantRepository from '../../../repositories/ConsultantRepository';
+import { clearPermissionCache } from '../../../middlewares/permissionMiddleware';
 
 const makeUser = (overrides: Record<string, unknown> = {}) => ({
   id: 'user-1',
@@ -505,5 +511,146 @@ describe('UserService.getOrganization', () => {
     vi.mocked(consultantRepository.findByGrupo).mockResolvedValueOnce([]);
     await userService.getOrganization({});
     expect(consultantRepository.findByGrupo).toHaveBeenCalledWith('');
+  });
+});
+
+// ------------------------------------------------- updateAdminPermissions
+describe('UserService.updateAdminPermissions', () => {
+  const gerenteCaller = { id: 'gerente-1', role: 'GERENTE' };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('atualiza permissões e invalida cache do target', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+    vi.mocked(userRepository.update).mockResolvedValueOnce(makeUser({ role: 'ADMIN', permissions: ['users.manage'] }) as any);
+
+    const result = await userService.updateAdminPermissions(
+      'target-1',
+      ['users.manage'] as any,
+      gerenteCaller,
+    );
+
+    expect(userRepository.update).toHaveBeenCalledWith(
+      'target-1',
+      expect.objectContaining({ permissions: ['users.manage'] }),
+    );
+    expect(clearPermissionCache).toHaveBeenCalledWith('target-1');
+    expect(result).toBeDefined();
+  });
+
+  it('lança 404 quando target não existe', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(null);
+
+    await expect(userService.updateAdminPermissions('nope', [] as any, gerenteCaller))
+      .rejects.toMatchObject({ statusCode: StatusCodes.NOT_FOUND });
+    expect(clearPermissionCache).not.toHaveBeenCalled();
+  });
+
+  it('lança 400 quando target não é ADMIN', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser({ role: 'CONSULTOR' }) as any);
+
+    await expect(userService.updateAdminPermissions('user-1', ['users.manage'] as any, gerenteCaller))
+      .rejects.toMatchObject({ statusCode: StatusCodes.BAD_REQUEST });
+  });
+
+  it('lança 400 quando permissão inválida', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+
+    await expect(userService.updateAdminPermissions('target-1', ['foo.bar'] as any, gerenteCaller))
+      .rejects.toMatchObject({
+        statusCode: StatusCodes.BAD_REQUEST,
+        message: expect.stringContaining('foo.bar'),
+      });
+  });
+
+  it('deduplica permissões repetidas', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+    vi.mocked(userRepository.update).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+
+    await userService.updateAdminPermissions(
+      'target-1',
+      ['users.manage', 'users.manage', 'debts.manage'] as any,
+      gerenteCaller,
+    );
+
+    const updateCall = vi.mocked(userRepository.update).mock.calls[0][1] as any;
+    expect(updateCall.permissions).toEqual(['users.manage', 'debts.manage']);
+  });
+
+  it('caller ADMIN não pode dar permissões que ele não tem (anti-escalada)', async () => {
+    const adminCaller = { id: 'admin-caller', role: 'ADMIN' };
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+    vi.mocked(userRepository.findPermissionsById).mockResolvedValueOnce({
+      id: 'admin-caller', role: 'ADMIN', permissions: ['users.manage'],
+    } as any);
+
+    await expect(userService.updateAdminPermissions(
+      'target-1',
+      ['users.manage', 'settings.manage'] as any,
+      adminCaller,
+    )).rejects.toMatchObject({
+      statusCode: StatusCodes.FORBIDDEN,
+      message: expect.stringContaining('settings.manage'),
+    });
+  });
+
+  it('caller ADMIN consegue editar para subset das próprias perms', async () => {
+    const adminCaller = { id: 'admin-caller', role: 'ADMIN' };
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+    vi.mocked(userRepository.findPermissionsById).mockResolvedValueOnce({
+      id: 'admin-caller', role: 'ADMIN', permissions: ['users.manage', 'debts.manage', 'settings.manage'],
+    } as any);
+    vi.mocked(userRepository.update).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+
+    await userService.updateAdminPermissions(
+      'target-1',
+      ['users.manage', 'debts.manage'] as any,
+      adminCaller,
+    );
+
+    expect(userRepository.update).toHaveBeenCalled();
+    expect(clearPermissionCache).toHaveBeenCalledWith('target-1');
+  });
+
+  it('caller ADMIN não pode conceder admins.manage', async () => {
+    const adminCaller = { id: 'admin-caller', role: 'ADMIN' };
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+    vi.mocked(userRepository.findPermissionsById).mockResolvedValueOnce({
+      id: 'admin-caller', role: 'ADMIN', permissions: ['admins.manage'],
+    } as any);
+
+    await expect(userService.updateAdminPermissions(
+      'target-1',
+      ['admins.manage'] as any,
+      adminCaller,
+    )).rejects.toMatchObject({
+      statusCode: StatusCodes.FORBIDDEN,
+      message: expect.stringContaining('admins.manage'),
+    });
+  });
+
+  it('GERENTE concede admins.manage normalmente', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+    vi.mocked(userRepository.update).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+
+    await userService.updateAdminPermissions(
+      'target-1',
+      ['admins.manage'] as any,
+      gerenteCaller,
+    );
+
+    expect(userRepository.update).toHaveBeenCalled();
+  });
+
+  it('aceita array vazio (revoga todas as permissões)', async () => {
+    vi.mocked(userRepository.findById).mockResolvedValueOnce(makeUser({ role: 'ADMIN' }) as any);
+    vi.mocked(userRepository.update).mockResolvedValueOnce(makeUser({ role: 'ADMIN', permissions: [] }) as any);
+
+    await userService.updateAdminPermissions('target-1', [] as any, gerenteCaller);
+
+    const updateCall = vi.mocked(userRepository.update).mock.calls[0][1] as any;
+    expect(updateCall.permissions).toEqual([]);
   });
 });

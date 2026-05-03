@@ -4,6 +4,7 @@ import AppError from '../utils/AppError';
 import userRepository from '../repositories/UserRepository';
 import paymentRepository from '../repositories/PaymentRepository';
 import consultantRepository from '../repositories/ConsultantRepository';
+import { clearPermissionCache } from '../middlewares/permissionMiddleware';
 import type { Prisma, UserRole } from '../../generated/prisma/client';
 import type { PaginationParams } from '../types';
 import { isValidPermission, type AdminPermission } from '../types/permissions';
@@ -294,6 +295,64 @@ class UserService {
     const updated = await userRepository.update(id, data);
     const { password: _, ...sanitized } = updated;
 
+    return sanitized;
+  }
+
+  async updateAdminPermissions(
+    targetId: string,
+    permissions: AdminPermission[],
+    caller: { id: string; role: string },
+  ) {
+    const target = await userRepository.findById(targetId);
+    if (!target) {
+      throw new AppError('Usuário não encontrado.', StatusCodes.NOT_FOUND);
+    }
+    if (target.role !== 'ADMIN') {
+      throw new AppError(
+        'Permissões granulares só se aplicam a usuários ADMIN.',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
+    // Valida e dedup
+    const requestedPerms = [...new Set(permissions ?? [])] as AdminPermission[];
+
+    for (const perm of requestedPerms) {
+      if (!isValidPermission(perm)) {
+        throw new AppError(`Permissão inválida: ${perm}.`, StatusCodes.BAD_REQUEST);
+      }
+    }
+
+    // admins.manage só GERENTE concede
+    if (requestedPerms.includes('admins.manage' as AdminPermission) && caller.role !== 'GERENTE') {
+      throw new AppError(
+        'Apenas GERENTE pode conceder a permissão admins.manage.',
+        StatusCodes.FORBIDDEN,
+      );
+    }
+
+    // Anti-escalada (não aplica a GERENTE)
+    if (caller.role !== 'GERENTE' && requestedPerms.length > 0) {
+      const callerData = await userRepository.findPermissionsById(caller.id);
+      const callerPerms = Array.isArray(callerData?.permissions)
+        ? (callerData.permissions as string[])
+        : [];
+
+      const illegal = requestedPerms.filter((p) => !callerPerms.includes(p));
+      if (illegal.length > 0) {
+        throw new AppError(
+          `Você não pode conceder permissões que você mesmo não possui: ${illegal.join(', ')}.`,
+          StatusCodes.FORBIDDEN,
+        );
+      }
+    }
+
+    const updated = await userRepository.update(targetId, { permissions: requestedPerms });
+
+    // Invalida cache do middleware imediatamente — próxima request do target lê fresh
+    clearPermissionCache(targetId);
+
+    const { password: _, ...sanitized } = updated;
     return sanitized;
   }
 }
