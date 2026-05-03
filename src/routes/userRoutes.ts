@@ -125,6 +125,7 @@ router.get(
  *               postalCode:
  *                 type: string
  *                 example: 01310-100
+ *                 description: "CEP do perfil do usuário — camelCase, com ou sem hífen"
  *     responses:
  *       200:
  *         description: Perfil atualizado
@@ -219,6 +220,7 @@ router.post(
  *   get:
  *     tags: [Users]
  *     summary: Listar cartões salvos
+ *     description: "Retorna os cartões tokenizados (Cofre eRede) do usuário. Inclui status atual de cada token (PENDING/ACTIVE/INACTIVE/FAILED)."
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -252,6 +254,7 @@ router.get(
  *   delete:
  *     tags: [Users]
  *     summary: Remover cartão salvo
+ *     description: "Remove o token do Cofre eRede e apaga o registro local. Operação irreversível."
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -260,6 +263,7 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
+ *           format: uuid
  *     responses:
  *       204:
  *         description: Cartão removido

@@ -173,7 +173,7 @@ const options: swaggerJsdoc.Options = {
                 district: { type: 'string', example: 'Centro' },
                 city: { type: 'string', example: 'São Paulo' },
                 state: { type: 'string', example: 'SP' },
-                postalcode: { type: 'string', example: '01001000' },
+                postalcode: { type: 'string', example: '01310100', description: 'CEP para billing da eRede — lowercase (sem hífen). Convenção do gateway eRede, distinta do User.postalCode.' },
                 country: { type: 'string', example: 'BR' },
               },
             },

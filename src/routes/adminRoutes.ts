@@ -179,32 +179,39 @@ router.post(
  *   get:
  *     tags: [Admin]
  *     summary: Listar todos os usuários
+ *     description: "Lista todos os usuários com filtros opcionais de role, grupo, distrito e status ativo. Resultado paginado."
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: role
+ *         description: "Filtrar por papel (UserRole)"
  *         schema:
  *           $ref: '#/components/schemas/UserRole'
  *       - in: query
  *         name: grupo
+ *         description: "Filtrar por grupo do consultor"
  *         schema:
  *           type: string
  *       - in: query
  *         name: distrito
+ *         description: "Filtrar por distrito do consultor"
  *         schema:
  *           type: string
  *       - in: query
  *         name: isActive
+ *         description: "Filtrar por status ativo (true/false)"
  *         schema:
  *           type: boolean
  *       - in: query
  *         name: page
+ *         description: "Número da página"
  *         schema:
  *           type: integer
  *           default: 1
  *       - in: query
  *         name: limit
+ *         description: "Itens por página"
  *         schema:
  *           type: integer
  *           default: 20
@@ -236,6 +243,7 @@ router.get(
  *   get:
  *     tags: [Admin]
  *     summary: Obter detalhes de um usuário
+ *     description: "Retorna dados completos do usuário incluindo dados de consultor vinculado, se existir."
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -244,6 +252,7 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
+ *           format: uuid
  *     responses:
  *       200:
  *         description: Dados do usuário
@@ -286,6 +295,7 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
+ *           format: uuid
  *     requestBody:
  *       required: true
  *       content:
@@ -347,6 +357,7 @@ router.put(
  *   patch:
  *     tags: [Admin]
  *     summary: Desativar usuário (soft delete)
+ *     description: "Realiza soft-delete do usuário (isActive=false). Não remove dados do banco."
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -355,6 +366,7 @@ router.put(
  *         required: true
  *         schema:
  *           type: string
+ *           format: uuid
  *     responses:
  *       200:
  *         description: Usuário desativado
@@ -397,6 +409,7 @@ router.patch(
  *         required: true
  *         schema:
  *           type: string
+ *           format: uuid
  *       - in: query
  *         name: page
  *         schema:
@@ -564,6 +577,7 @@ router.post(
  *   get:
  *     tags: [Admin]
  *     summary: Listar ADMINs (GERENTE only)
+ *     description: "Lista todos os usuários com role ADMIN, incluindo permissões granulares e jobTitle."
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -672,6 +686,7 @@ router.put(
  *         required: true
  *         schema:
  *           type: string
+ *           format: uuid
  *     requestBody:
  *       required: true
  *       content:
@@ -732,6 +747,7 @@ router.put(
  *   get:
  *     tags: [Admin]
  *     summary: Listar configurações (GERENTE only)
+ *     description: "Retorna todas as chaves de configuração do sistema e seus valores atuais."
  *     security:
  *       - bearerAuth: []
  *     responses:
