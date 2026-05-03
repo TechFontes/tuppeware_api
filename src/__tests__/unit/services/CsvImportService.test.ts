@@ -50,7 +50,8 @@ describe('CsvImportService.importClients — senha inicial (CRIT-08)', () => {
       password: data.password,
       phone: null, birthDate: null, address: null, addressNumber: null,
       addressComplement: null, neighbourhood: null, city: null, state: null,
-      postalCode: null, consultant: null, createdAt: new Date(), updatedAt: new Date(),
+      postalCode: null, consultant: null, permissions: [], jobTitle: null,
+      createdAt: new Date(), updatedAt: new Date(),
     }));
     vi.mocked(consultantRepository.upsertByCpf).mockResolvedValueOnce({ id: 'c1', userId: null } as any);
     vi.mocked(consultantRepository.findByCpf).mockResolvedValueOnce({ id: 'c1', userId: null } as any);
@@ -80,7 +81,8 @@ describe('CsvImportService.importClients — senha inicial (CRIT-08)', () => {
       role: 'CONSULTOR', isActive: true, password: data.password,
       phone: null, birthDate: null, address: null, addressNumber: null,
       addressComplement: null, neighbourhood: null, city: null, state: null,
-      postalCode: null, consultant: null, createdAt: new Date(), updatedAt: new Date(),
+      postalCode: null, consultant: null, permissions: [], jobTitle: null,
+      createdAt: new Date(), updatedAt: new Date(),
     }));
     vi.mocked(consultantRepository.upsertByCpf).mockResolvedValueOnce({ id: 'c1', userId: null } as any);
     vi.mocked(consultantRepository.findByCpf).mockResolvedValueOnce({ id: 'c1', userId: null } as any);
@@ -325,6 +327,8 @@ describe('CsvImportService.importClients — branches de cobertura', () => {
       state: null,
       postalCode: null,
       consultant: null,
+      permissions: [],
+      jobTitle: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     }));

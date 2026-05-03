@@ -122,6 +122,49 @@ describe('UserController.getMe', () => {
       partialPaymentMinRemaining: null,
     });
   });
+
+  it('retorna permissions e jobTitle do user no data', async () => {
+    vi.mocked(userService.findById).mockResolvedValueOnce({
+      id: 'u1',
+      name: 'Admin',
+      email: 'a@a.com',
+      role: 'ADMIN',
+      jobTitle: 'Coordenadora',
+      permissions: ['users.manage', 'debts.manage'],
+    } as any);
+    vi.mocked(settingsService.getAll).mockResolvedValueOnce({});
+
+    const req: any = { user: { id: 'u1', role: 'ADMIN', email: 'a@a.com' } };
+    const res = makeRes();
+
+    await userController.getMe(req, res, makeNext());
+
+    expect(res.status).toHaveBeenCalledWith(StatusCodes.OK);
+    const payload = res.json.mock.calls[0][0];
+    expect(payload.data.permissions).toEqual(['users.manage', 'debts.manage']);
+    expect(payload.data.jobTitle).toBe('Coordenadora');
+  });
+
+  it('retorna jobTitle=null e permissions=[] quando user não tem (CONSULTOR)', async () => {
+    vi.mocked(userService.findById).mockResolvedValueOnce({
+      id: 'u1',
+      name: 'Consultor',
+      email: 'c@c.com',
+      role: 'CONSULTOR',
+      jobTitle: null,
+      permissions: [],
+    } as any);
+    vi.mocked(settingsService.getAll).mockResolvedValueOnce({});
+
+    const req: any = { user: { id: 'u1', role: 'CONSULTOR', email: 'c@c.com' } };
+    const res = makeRes();
+
+    await userController.getMe(req, res, makeNext());
+
+    const payload = res.json.mock.calls[0][0];
+    expect(payload.data.permissions).toEqual([]);
+    expect(payload.data.jobTitle).toBeNull();
+  });
 });
 
 describe('UserController.getSavedCards', () => {
