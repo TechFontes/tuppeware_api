@@ -244,4 +244,21 @@ Admin routes accept multipart CSV uploads via Multer. `CsvImportService` handles
 **Pendências de manutenção descobertas no deploy:**
 - `docker-compose.yml` na raiz é obsoleto (prod usa PM2, não Docker) — considerar remover ou marcar como dev-only
 - `rateLimitMiddleware` dispara warning `ERR_ERL_KEY_GEN_IPV6` do `express-rate-limit` (não bloqueia, mas precisa do helper `ipKeyGenerator`)
+
+---
+
+## Sessão 2026-05-03 — Permissões ADM + Swagger refactor + bugfixes (ARCHIVABLE)
+
+**Em prod:**
+- **Permissões ADM granulares**: `users.permissions Json` + `jobTitle` + 8 chaves do `AdminPermission` catálogo. `permissionMiddleware` (cache 60s) substitui `roleMiddleware` em 21 rotas admin. 2 endpoints novos: `GET /admin/permissions/catalog` e `PUT /admin/managers/:id/permissions`. `/users/me` retorna `permissions[]` + `jobTitle`. Anti-escalada no service (caller não-GERENTE não dá perm que não tem; `admins.manage` só GERENTE concede). Backfill prod: GERENTE=8 perm, ADMIN=7. (13 commits, plano `2026-04-30-erede-cofre-cartoes.md`).
+- **Endpoint `GET /debts/summary`** — agregados `{ totalDebitos, valorTotal, consultoresAtraso, gruposAtivos }` respeitando hierarquia. ADMIN/GERENTE aceita `?grupo=X&distrito=Y`.
+- **Swagger refatorado** (8 commits): cobertura 28→37 paths, 14→26 schemas reusáveis, 7 tags globais, server prod adicionado, security global bearerAuth, fix crítico no `PaginatedResponse.data` (era `{}` quebrado), 8 rotas admin que não tinham `@swagger` agora têm, exemplos concretos PIX/Cofre/webhook. Script `npm run swagger:check` valida thresholds.
+- **Fix PIX v2** (descoberto via probe sandbox + plugin WP `virtuaria-eredeitau`): `kind: "Pix"` capitalizado, `qrCode.dateTimeExpiration` (objeto, sem TZ/ms), response em `qrCodeResponse` com `qrCodeData`/`qrCodeImage`. Commit `37e8dab`, validado em sandbox prod.
+- **Fix bugs de validação 500**: `POST /admin/managers`, `POST /admin/debts`, `PATCH /admin/debts/:id/status` retornavam 500 com body inválido (sem express-validator). Adicionado `createManagerValidator`, `createDebtValidator`, `updateDebtStatusValidator`. Commit `41215bc`.
+
+**Padrão de execução validado:** Opus orquestra (planning, decisões, AskUserQuestion, code review final), Sonnet implementa tasks TDD. Subagent-driven (fresh context por task) usado nos 3 planos da sessão.
+
+**Pendências:**
+- Container Docker MySQL local (`mysql_tupper`, port 9987) precisa estar up pra rodar migrations — `docker start mysql_tupper`. Senha root: `Teste1234`.
+- Suite 491/491. TS 0 erros. Cobertura Swagger via `npm run swagger:check`.
 - Senha root SSH do servidor de prod foi exposta em chat — trocar e idealmente desabilitar `PasswordAuthentication` (chave já configurada)
